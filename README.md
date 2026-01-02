@@ -13,44 +13,15 @@
 
 ## 部署 Workers
 
-### 步骤 1：创建 Worker
-
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
 2. 进入 Workers & Pages
 3. 点击 Create application → Create Worker
 4. 将 `workers.js` 代码粘贴到编辑器中
 5. 点击 Deploy
 
-### 步骤 2：创建 KV 命名空间
+部署完成后，你将获得一个 Workers 地址，如 `https://xxx.username.workers.dev`
 
-1. 进入 Workers & Pages → KV
-2. 点击 Create a namespace
-3. 输入名称（如 `cfspider`）
-4. 创建后复制 Namespace ID
-
-### 步骤 3：绑定 KV
-
-1. 进入你的 Worker → Settings → Variables
-2. 在 KV Namespace Bindings 中添加：
-   - Variable name: `KV`
-   - KV namespace: 选择刚创建的命名空间
-3. 点击 Save
-
-### 步骤 4：设置环境变量（可选）
-
-在 Worker Settings → Variables → Environment Variables 中添加：
-
-| 变量名 | 说明 | 示例 |
-|--------|------|------|
-| ADMIN | 管理密码 | your_password |
-| UUID | 自定义 UUID | 留空则自动生成 |
-| PROXYIP | 反代 IP | proxyip.example.com |
-
-### 步骤 5：绑定自定义域名（可选）
-
-1. 进入 Worker → Settings → Triggers
-2. 添加 Custom Domain
-3. 输入你的域名（需已托管在 Cloudflare）
+如需自定义域名，可在 Worker → Settings → Triggers → Custom Domain 中添加。
 
 ## 安装
 
