@@ -9,6 +9,7 @@
 - 支持 GET、POST、PUT、DELETE 等所有 HTTP 方法
 - 支持 Session 会话管理
 - 返回 Cloudflare 节点信息（cf_colo、cf_ray）
+- **支持浏览器模式**，可渲染 JavaScript 动态页面、截图、自动化操作
 - 完全免费，Workers 免费版每日 100,000 请求
 
 ## 部署 Workers
@@ -254,12 +255,148 @@ except Exception as e:
     print(f"其他错误: {e}")
 ```
 
+## 浏览器模式
+
+CFspider 支持浏览器模式，可以渲染 JavaScript 动态页面、截图、生成 PDF、自动化操作等。
+
+### 安装浏览器
+
+首先安装浏览器功能依赖和 Chromium：
+
+```bash
+# 安装带浏览器支持的 cfspider
+pip install cfspider[browser]
+
+# 安装 Chromium 浏览器
+cfspider install
+```
+
+或者使用 Python 代码安装：
+
+```python
+import cfspider
+cfspider.install_browser()
+```
+
+### 获取渲染后的 HTML
+
+```python
+import cfspider
+
+browser = cfspider.Browser(cf_proxies="https://your-workers.dev")
+
+# 获取 JavaScript 渲染后的完整 HTML
+html = browser.html("https://example.com")
+print(html)
+
+browser.close()
+```
+
+### 页面截图
+
+```python
+import cfspider
+
+browser = cfspider.Browser(cf_proxies="https://your-workers.dev")
+
+# 截图并保存
+browser.screenshot("https://example.com", "screenshot.png")
+
+# 截取整个页面
+browser.screenshot("https://example.com", "full.png", full_page=True)
+
+browser.close()
+```
+
+### 生成 PDF
+
+```python
+import cfspider
+
+browser = cfspider.Browser(cf_proxies="https://your-workers.dev")
+
+# 生成 PDF（仅无头模式可用）
+browser.pdf("https://example.com", "page.pdf")
+
+browser.close()
+```
+
+### 自动化操作
+
+```python
+import cfspider
+
+browser = cfspider.Browser(cf_proxies="https://your-workers.dev")
+
+# 打开页面，返回 Playwright Page 对象
+page = browser.get("https://example.com")
+
+# 点击元素
+page.click("button#submit")
+
+# 填写表单
+page.fill("input#username", "myname")
+page.fill("input#password", "mypassword")
+
+# 等待元素
+page.wait_for_selector(".result")
+
+# 获取文本
+text = page.inner_text(".result")
+print(text)
+
+browser.close()
+```
+
+### 执行 JavaScript
+
+```python
+import cfspider
+
+browser = cfspider.Browser(cf_proxies="https://your-workers.dev")
+
+# 在页面中执行 JavaScript
+result = browser.execute_script("https://example.com", "return document.title")
+print(result)
+
+browser.close()
+```
+
+### 使用 with 语句
+
+```python
+import cfspider
+
+with cfspider.Browser(cf_proxies="https://your-workers.dev") as browser:
+    html = browser.html("https://example.com")
+    print(html)
+# 自动关闭浏览器
+```
+
+### 非无头模式
+
+```python
+import cfspider
+
+# headless=False 可以看到浏览器窗口
+browser = cfspider.Browser(
+    cf_proxies="https://your-workers.dev",
+    headless=False
+)
+
+page = browser.get("https://example.com")
+# 可以看到浏览器操作
+
+browser.close()
+```
+
 ## 注意事项
 
 1. Workers 免费版限制：每日 100,000 请求，单次 CPU 时间 10ms
 2. 请求体大小限制：免费版 100MB，付费版无限制
 3. 超时限制：免费版 30 秒，付费版无限制
 4. 不支持 WebSocket、gRPC 等非 HTTP 协议
+5. 浏览器模式需要额外安装 `playwright` 和 Chromium
 
 ## License
 
