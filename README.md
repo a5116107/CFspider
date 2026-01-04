@@ -115,6 +115,7 @@ Cloudflare Workers 免费版每日 100,000 请求，无需信用卡，无需付�
 - **支持 HTTP/2 协议**，更快的连接复用和性能
 - **支持流式响应**，高效处理大文件下载
 - **支持 TLS 指纹模拟**（基于 curl_cffi），可模拟 Chrome/Safari/Firefox/Edge 浏览器指纹
+- **支持 IP 地图可视化**（基于 MapLibre GL），生成 HTML 地图文件，显示代理 IP 地理位置
 - 完全免费，Workers 免费版每日 100,000 请求
 
 ## 测试结果
@@ -129,6 +130,7 @@ Cloudflare Workers 免费版每日 100,000 请求，无需信用卡，无需付�
 | 浏览器(HTTP代理) | OK | 支持本地/远程代理 |
 | 浏览器(VLESS) | OK | Cloudflare IP 出口 |
 | 浏览器(无代理) | OK | 本地 IP 出口 |
+| IP 地图可视化 | OK | 生成 HTML 地图文件 |
 
 ## 部署 Workers
 
@@ -596,6 +598,114 @@ print(browsers)
 | `cfspider.impersonate_request(method, url, **kwargs)` | 自定义方法请求 |
 | `cfspider.ImpersonateSession(impersonate="chrome131", **kwargs)` | 指纹会话 |
 | `cfspider.get_supported_browsers()` | 获取支持的浏览器列表 |
+
+## IP 地图可视化
+
+CFspider 支持生成 IP 地理位置地图，可视化展示代理请求使用的 Cloudflare 节点分布。
+
+### 基本用法
+
+```python
+import cfspider
+
+# 启用地图输出
+response = cfspider.get(
+    "https://httpbin.org/get",
+    cf_proxies="https://your-workers.dev",
+    map_output=True,                    # 启用地图输出
+    map_file="my_proxy_map.html"        # 自定义文件名（可选）
+)
+
+# 请求完成后会自动生成 HTML 地图文件
+# 在浏览器中打开 my_proxy_map.html 即可查看地图
+```
+
+### 多次请求收集
+
+```python
+import cfspider
+
+# 清空之前的记录
+cfspider.clear_map_records()
+
+# 发送多个请求
+urls = [
+    "https://httpbin.org/get",
+    "https://api.ipify.org",
+    "https://ifconfig.me/ip"
+]
+
+for url in urls:
+    response = cfspider.get(
+        url,
+        cf_proxies="https://your-workers.dev",
+        map_output=True,
+        map_file="multi_request_map.html"
+    )
+    print(f"{url}: {response.cf_colo}")
+
+# 获取收集器信息
+collector = cfspider.get_map_collector()
+print(f"总请求数: {len(collector.get_records())}")
+print(f"使用的节点: {collector.get_unique_colos()}")
+```
+
+### 手动添加记录
+
+```python
+import cfspider
+
+# 手动添加 IP 记录
+cfspider.add_ip_record(
+    url="https://example.com",
+    cf_colo="NRT",           # Cloudflare 节点代码
+    status_code=200,
+    response_time=50.0       # 毫秒
+)
+
+# 生成地图
+cfspider.generate_map_html(
+    output_file="custom_map.html",
+    title="My Custom IP Map"
+)
+```
+
+### 节点坐标数据
+
+CFspider 内置了 39 个主要 Cloudflare 节点的坐标数据：
+
+```python
+import cfspider
+
+# 查看支持的节点
+print(f"支持节点数: {len(cfspider.COLO_COORDINATES)}")
+
+# 查看某个节点信息
+nrt = cfspider.COLO_COORDINATES["NRT"]
+print(f"东京: {nrt['city']}, {nrt['country']} ({nrt['lat']}, {nrt['lng']})")
+```
+
+### IP 地图 API 参考
+
+| 方法 | 说明 |
+|------|------|
+| `cfspider.get(..., map_output=True)` | 请求时启用地图输出 |
+| `cfspider.clear_map_records()` | 清空地图记录 |
+| `cfspider.get_map_collector()` | 获取 IP 收集器 |
+| `cfspider.add_ip_record(**kwargs)` | 手动添加 IP 记录 |
+| `cfspider.generate_map_html(**kwargs)` | 生成地图 HTML |
+| `cfspider.COLO_COORDINATES` | 节点坐标数据库 |
+
+### 地图特性
+
+生成的 HTML 地图包含：
+
+- **Cyberpunk 风格**：与 CFspider 整体风格一致
+- **MapLibre GL**：高性能 WebGL 地图渲染
+- **交互式标记**：点击标记查看详细信息
+- **统计面板**：显示请求总数、唯一节点数
+- **节点列表**：显示所有使用的 Cloudflare 节点代码
+- **自动缩放**：地图自动缩放到数据范围
 
 ## 浏览器模式
 
