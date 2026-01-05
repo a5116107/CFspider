@@ -1204,7 +1204,7 @@ Cloudflare IP 被数百万网站使用，信誉极高。但如果对单一网站
 完全支持。Workers 自动提供 SSL/TLS 加密，所有请求都通过 HTTPS 传输，确保数据安全。
 
 ### 能用于商业项目吗？
-可以。MIT 许可证允许商业使用。但建议阅读 Cloudflare Workers 服务条款，确保用途合规。
+可以。Apache 2.0 许可证允许商业使用。但建议阅读 Cloudflare Workers 服务条款，确保用途合规。
 
 ### 为什么不能直接用 CF CDN IP？
 Cloudflare CDN IP (如 172.64.x.x) 是 Anycast IP，仅用于边缘加速，不提供 HTTP 代理服务。必须通过 Workers 才能实现代理功能。
