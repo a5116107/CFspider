@@ -31,6 +31,20 @@ export default {
             return new Response(null, { headers: corsHeaders });
         }
         
+        // Token 验证（除了首页和 debug 页面）
+        if (path !== '' && path !== '/' && path !== 'debug') {
+            const tokenValidation = validateToken(request, env);
+            if (!tokenValidation.valid) {
+                return new Response(JSON.stringify({
+                    error: 'Unauthorized',
+                    message: 'Invalid or missing token'
+                }), {
+                    status: 401,
+                    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+                });
+            }
+        }
+        
         if (path === '' || path === '/') {
             return new Response(generateCyberpunkPage(request, url, 访问IP), {
                 headers: { 'Content-Type': 'text/html; charset=utf-8' }
@@ -1305,4 +1319,43 @@ browser.<span class="code-function">close</span>()</pre>
     </script>
 </body>
 </html>`;
+}
+
+function validateToken(request, env) {
+    // 如果没有配置 TOKEN 环境变量，跳过验证
+    if (!env.TOKEN) {
+        return { valid: true };
+    }
+    
+    // 从环境变量读取 token 列表（逗号分隔）
+    const allowedTokens = env.TOKEN.split(',').map(t => t.trim()).filter(t => t);
+    
+    // 如果没有配置任何 token，跳过验证
+    if (allowedTokens.length === 0) {
+        return { valid: true };
+    }
+    
+    // 从查询参数获取 token
+    const url = new URL(request.url);
+    const queryToken = url.searchParams.get('token');
+    
+    // 从 Header 获取 token (Authorization: Bearer xxx)
+    const authHeader = request.headers.get('Authorization');
+    let headerToken = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        headerToken = authHeader.substring(7).trim();
+    }
+    
+    // 优先使用查询参数，其次使用 Header
+    const providedToken = queryToken || headerToken;
+    
+    // 如果没有提供 token，验证失败
+    if (!providedToken) {
+        return { valid: false };
+    }
+    
+    // 验证 token 是否在允许列表中
+    const isValid = allowedTokens.includes(providedToken);
+    
+    return { valid: isValid };
 }

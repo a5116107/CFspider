@@ -51,6 +51,7 @@ class AsyncSession:
         self.timeout = timeout
         self.headers = headers or {}
         self.cookies = cookies or {}
+        self.token = token
         self._client_kwargs = kwargs
         self._client: Optional[httpx.AsyncClient] = None
     
@@ -143,6 +144,8 @@ class AsyncSession:
             target_url = f"{url}?{urlencode(params)}"
         
         proxy_url = f"{cf_proxies_url}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+        if self.token:
+            proxy_url += f"&token={quote(self.token, safe='')}"
         
         request_headers = {}
         for key, value in merged_headers.items():
@@ -223,6 +226,8 @@ class AsyncSession:
             target_url = f"{url}?{urlencode(params)}"
         
         proxy_url = f"{cf_proxies_url}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+        if self.token:
+            proxy_url += f"&token={quote(self.token, safe='')}"
         
         request_headers = {}
         for key, value in merged_headers.items():

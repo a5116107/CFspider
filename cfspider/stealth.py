@@ -280,6 +280,7 @@ class StealthSession:
         cf_workers: bool = True,
         delay: Tuple[float, float] = None,
         auto_referer: bool = True,
+        token: str = None,
         **kwargs
     ):
         """
@@ -319,6 +320,7 @@ class StealthSession:
         self.cf_workers = cf_workers
         self.delay = delay
         self.auto_referer = auto_referer
+        self.token = token
         self.last_url = None
         self.request_count = 0
         self._extra_kwargs = kwargs
@@ -389,6 +391,7 @@ class StealthSession:
             url,
             cf_proxies=self.cf_proxies,
             cf_workers=self.cf_workers,
+            token=self.token,
             headers=headers,
             cookies=cookies,
             **kwargs
@@ -419,6 +422,7 @@ class StealthSession:
             url,
             cf_proxies=self.cf_proxies,
             cf_workers=self.cf_workers,
+            token=self.token,
             headers=headers,
             cookies=cookies,
             **kwargs
@@ -442,6 +446,7 @@ class StealthSession:
             url,
             cf_proxies=self.cf_proxies,
             cf_workers=self.cf_workers,
+            token=self.token,
             headers=headers,
             cookies=cookies,
             **kwargs
@@ -463,6 +468,7 @@ class StealthSession:
             url,
             cf_proxies=self.cf_proxies,
             cf_workers=self.cf_workers,
+            token=self.token,
             headers=headers,
             cookies=cookies,
             **kwargs
@@ -484,6 +490,7 @@ class StealthSession:
             url,
             cf_proxies=self.cf_proxies,
             cf_workers=self.cf_workers,
+            token=self.token,
             headers=headers,
             cookies=cookies,
             **kwargs

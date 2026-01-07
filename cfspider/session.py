@@ -39,19 +39,21 @@ class Session:
         请使用 cfspider.StealthSession。
     """
     
-    def __init__(self, cf_proxies=None):
+    def __init__(self, cf_proxies=None, token=None):
         """
         初始化会话
         
         Args:
             cf_proxies (str): Workers 代理地址（必填）
                 例如："https://your-workers.dev"
+            token (str, optional): Workers API 鉴权 token
+                当 Workers 端配置了 TOKEN 环境变量时，必须提供有效的 token
         
         Raises:
             ValueError: 当 cf_proxies 为空时
         
         Example:
-            >>> session = cfspider.Session(cf_proxies="https://your-workers.dev")
+            >>> session = cfspider.Session(cf_proxies="https://your-workers.dev", token="your-token")
         """
         if not cf_proxies:
             raise ValueError(
@@ -62,6 +64,7 @@ class Session:
                 "如果需要隐身模式会话，请使用 cfspider.StealthSession。"
             )
         self.cf_proxies = cf_proxies.rstrip("/")
+        self.token = token
         self.headers = {}
         self.cookies = {}
     
@@ -91,6 +94,7 @@ class Session:
             method,
             url,
             cf_proxies=self.cf_proxies,
+            token=self.token,
             headers=headers,
             cookies=cookies,
             **kwargs

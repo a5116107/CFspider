@@ -174,6 +174,7 @@ async def arequest(
     cf_proxies: Optional[str] = None,
     cf_workers: bool = True,
     http2: bool = True,
+    token: Optional[str] = None,
     **kwargs
 ) -> AsyncCFSpiderResponse:
     """
@@ -244,6 +245,8 @@ async def arequest(
         target_url = f"{url}?{urlencode(params)}"
     
     proxy_url = f"{cf_proxies}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+    if token:
+        proxy_url += f"&token={quote(token, safe='')}"
     
     request_headers = {}
     if headers:
@@ -276,6 +279,7 @@ async def astream(
     cf_proxies: Optional[str] = None,
     cf_workers: bool = True,
     http2: bool = True,
+    token: Optional[str] = None,
     **kwargs
 ) -> AsyncIterator[AsyncStreamResponse]:
     """
@@ -351,6 +355,8 @@ async def astream(
         target_url = f"{url}?{urlencode(params)}"
     
     proxy_endpoint = f"{cf_proxies_url}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+    if token:
+        proxy_endpoint += f"&token={quote(token, safe='')}"
     
     request_headers = {}
     if headers:

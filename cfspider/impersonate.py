@@ -87,6 +87,7 @@ def impersonate_request(
     impersonate: str = "chrome131",
     cf_proxies: Optional[str] = None,
     cf_workers: bool = True,
+    token: Optional[str] = None,
     **kwargs
 ) -> ImpersonateResponse:
     """
@@ -171,6 +172,8 @@ def impersonate_request(
         target_url = f"{url}?{urlencode(params)}"
     
     proxy_url = f"{cf_proxies}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+    if token:
+        proxy_url += f"&token={quote(token, safe='')}"
     
     request_headers = {}
     if headers:

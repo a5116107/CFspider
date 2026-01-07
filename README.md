@@ -210,6 +210,40 @@ Cloudflare Workers 免费版每日 100,000 请求，无需信用卡，无需付�
 
 如需自定义域名，可在 Worker → Settings → Triggers → Custom Domain 中添加。
 
+### Token 鉴权配置（可选）
+
+为了增强安全性，你可以为 Workers 配置 Token 鉴权：
+
+1. 在 Worker → Settings → Variables and Secrets 中添加环境变量
+2. 变量名：`TOKEN`
+3. 变量值：你的 token（支持多个 token，用逗号分隔，如 `token1,token2,token3`）
+4. 保存并重新部署 Worker
+
+配置 Token 后，所有 API 请求（除了首页和 debug 页面）都需要提供有效的 token：
+
+```python
+import cfspider
+
+# 在请求时传递 token
+response = cfspider.get(
+    "https://httpbin.org/ip",
+    cf_proxies="https://your-workers.dev",
+    token="your-token"  # 从查询参数传递
+)
+
+# 或在 Session 中设置 token
+with cfspider.Session(
+    cf_proxies="https://your-workers.dev",
+    token="your-token"
+) as session:
+    response = session.get("https://httpbin.org/ip")
+```
+
+**注意：**
+- 如果不配置 `TOKEN` 环境变量，则所有请求都可以访问（无鉴权）
+- Token 可以通过查询参数 `?token=xxx` 或 Header `Authorization: Bearer xxx` 传递
+- 支持配置多个 token，用逗号分隔
+
 ## 安装
 
 ### 方式一：PyPI 安装（推荐）

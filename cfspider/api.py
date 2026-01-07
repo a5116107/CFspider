@@ -166,7 +166,7 @@ class CFSpiderResponse:
 
 def request(method, url, cf_proxies=None, cf_workers=True, http2=False, impersonate=None, 
              map_output=False, map_file="cfspider_map.html", 
-             stealth=False, stealth_browser='chrome', delay=None, **kwargs):
+             stealth=False, stealth_browser='chrome', delay=None, token=None, **kwargs):
     """
     发送 HTTP 请求
     
@@ -201,6 +201,10 @@ def request(method, url, cf_proxies=None, cf_workers=True, http2=False, imperson
         delay (tuple, optional): 请求前的随机延迟范围（秒）
             - 如 (1, 3) 表示请求前随机等待 1-3 秒
             - 用于模拟人类行为，避免被反爬系统检测
+        token (str, optional): Workers API 鉴权 token
+            - 当使用 Workers API（cf_workers=True）时，将 token 添加到查询参数
+            - 如果 Workers 端配置了 TOKEN 环境变量，必须提供有效的 token
+            - 格式：从查询参数 ?token=xxx 传递
         **kwargs: 其他参数，与 requests 库完全兼容
             - params (dict): URL 查询参数
             - headers (dict): 自定义请求头（会与隐身模式头合并）
@@ -284,7 +288,7 @@ def request(method, url, cf_proxies=None, cf_workers=True, http2=False, imperson
             method, url, cf_proxies, cf_workers, impersonate,
             params=params, headers=headers, data=data,
             json_data=json_data, cookies=cookies, timeout=timeout,
-            **kwargs
+            token=token, **kwargs
         )
         _handle_map_output(response, url, start_time, map_output, map_file)
         return response
@@ -295,7 +299,7 @@ def request(method, url, cf_proxies=None, cf_workers=True, http2=False, imperson
             method, url, cf_proxies, cf_workers,
             params=params, headers=headers, data=data,
             json_data=json_data, cookies=cookies, timeout=timeout,
-            **kwargs
+            token=token, **kwargs
         )
         _handle_map_output(response, url, start_time, map_output, map_file)
         return response
@@ -356,7 +360,10 @@ def request(method, url, cf_proxies=None, cf_workers=True, http2=False, imperson
     if params:
         target_url = f"{url}?{urlencode(params)}"
     
+    # 构建代理 URL，添加 token 参数（如果提供）
     proxy_url = f"{cf_proxies_url}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+    if token:
+        proxy_url += f"&token={quote(token, safe='')}"
     
     request_headers = {}
     if headers:
@@ -408,7 +415,7 @@ def _handle_map_output(response, url, start_time, map_output, map_file):
 
 def _request_impersonate(method, url, cf_proxies, cf_workers, impersonate,
                          params=None, headers=None, data=None, json_data=None,
-                         cookies=None, timeout=30, **kwargs):
+                         cookies=None, timeout=30, token=None, **kwargs):
     """使用 curl_cffi 发送请求（支持 TLS 指纹模拟）"""
     curl_requests = _get_curl_cffi()
     
@@ -460,6 +467,8 @@ def _request_impersonate(method, url, cf_proxies, cf_workers, impersonate,
         target_url = f"{url}?{urlencode(params)}"
     
     proxy_url = f"{cf_proxies}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+    if token:
+        proxy_url += f"&token={quote(token, safe='')}"
     
     request_headers = {}
     if headers:
@@ -487,7 +496,7 @@ def _request_impersonate(method, url, cf_proxies, cf_workers, impersonate,
 
 
 def _request_httpx(method, url, cf_proxies, cf_workers, params=None, headers=None,
-                   data=None, json_data=None, cookies=None, timeout=30, **kwargs):
+                   data=None, json_data=None, cookies=None, timeout=30, token=None, **kwargs):
     """使用 httpx 发送请求（支持 HTTP/2）"""
     httpx = _get_httpx()
     
@@ -536,6 +545,8 @@ def _request_httpx(method, url, cf_proxies, cf_workers, params=None, headers=Non
         target_url = f"{url}?{urlencode(params)}"
     
     proxy_url = f"{cf_proxies}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
+    if token:
+        proxy_url += f"&token={quote(token, safe='')}"
     
     request_headers = {}
     if headers:
