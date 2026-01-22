@@ -2319,14 +2319,13 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
     // VLESS 配置
     const vlessHost = url.hostname;
     const vlessPort = '443';
-    // 如果启用双层代理，在 path 中携带代理信息
-    const vlessPath = twoProxyEnabled 
-        ? '/' + userID + '?two_proxy=' + encodeURIComponent(twoProxy)
-        : '/' + userID;
-    const vlessLink = userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(vlessPath)}&encryption=none#CFspider-${colo}${twoProxyEnabled ? '-2P' : ''}` : '';
+    // 普通 VLESS 链接（不带双层代理，出口为 Cloudflare WARP IP）
+    const vlessPath = '/' + userID;
+    const vlessLink = userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(vlessPath)}&encryption=none#CFspider-${colo}` : '';
     
     // 双层代理专用链接（出口为第二层代理 IP）
-    const twoProxyLink = twoProxyEnabled && userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(vlessPath)}&encryption=none#CFspider-TwoProxy-${twoProxyHost.split('.')[0]}` : '';
+    const twoProxyPath = '/' + userID + '?two_proxy=' + encodeURIComponent(twoProxy);
+    const twoProxyLink = twoProxyEnabled && userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(twoProxyPath)}&encryption=none#CFspider-TwoProxy-${twoProxyHost.split('.')[0]}` : '';
     
     const countryNames = {
         'JP': '日本', 'CN': '中国', 'US': '美国', 'HK': '香港', 'TW': '台湾',
@@ -2355,7 +2354,7 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             feature1: '全球 300+ 节点', feature2: 'TLS 指纹模拟', feature3: '隐身模式',
             feature4: 'HTTP/2 协议', feature5: '浏览器自动化', feature6: 'VLESS 协议',
             vlessTitle: 'VLESS 代理配置', vlessUUID: 'UUID', vlessHost: '服务器地址', vlessPort: '端口',
-            vlessLink: '一键导入链接', vlessCopy: '点击复制到剪贴板', version: '版本',
+            vlessLink: '一键导入链接 (WARP 出口)', vlessCopy: '点击复制到剪贴板', version: '版本',
             defaultUuidWarning: '当前使用公共 UUID，建议通过 Cloudflare Dashboard 设置私有 UUID 环境变量以提高安全性',
             newIp: '动态 IP', transport: '传输协议', security: '安全协议', encryption: '加密方式',
             credits: 'VLESS 技术基于 edgetunnel 项目',
@@ -2383,7 +2382,7 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             feature1: '300+ Global Nodes', feature2: 'TLS Fingerprint', feature3: 'Stealth Mode',
             feature4: 'HTTP/2 Protocol', feature5: 'Browser Automation', feature6: 'VLESS Protocol',
             vlessTitle: 'VLESS Proxy Configuration', vlessUUID: 'UUID', vlessHost: 'Server Address', vlessPort: 'Port',
-            vlessLink: 'One-Click Import Link', vlessCopy: 'Click to copy', version: 'Version',
+            vlessLink: 'One-Click Import (WARP Exit)', vlessCopy: 'Click to copy', version: 'Version',
             defaultUuidWarning: 'Using public UUID. Set private UUID via Cloudflare Dashboard for better security',
             newIp: 'Dynamic IP', transport: 'Transport', security: 'Security', encryption: 'Encryption',
             credits: 'VLESS based on edgetunnel project',
