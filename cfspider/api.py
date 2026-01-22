@@ -382,7 +382,7 @@ class CFSpiderResponse:
 def request(method, url, cf_proxies=None, uuid=None, http2=False, impersonate=None, 
              map_output=False, map_file="cfspider_map.html", 
              stealth=False, stealth_browser='chrome', delay=None,
-             static_ip=False, **kwargs):
+             static_ip=False, two_proxy=None, **kwargs):
     """
     发送 HTTP 请求
     
@@ -403,6 +403,12 @@ def request(method, url, cf_proxies=None, uuid=None, http2=False, impersonate=No
         static_ip: 是否使用固定 IP（默认 False）
             - False: 每次请求获取新的出口 IP（适合大规模采集）
             - True: 保持使用同一个 IP（适合需要会话一致性的场景）
+        
+        two_proxy: 第二层代理（可选）
+            格式: "host:port:user:pass" 或 "host:port"
+            例如: "us.cliproxy.io:3010:username:password"
+            用于无法直连第二层代理时，通过 Workers 作为跳板
+            流程: 本地 → Workers (VLESS) → 第二层代理 → 目标网站
         
         http2: 是否启用 HTTP/2 协议（默认 False）
         
@@ -471,7 +477,7 @@ def request(method, url, cf_proxies=None, uuid=None, http2=False, impersonate=No
             http2=http2, impersonate=impersonate,
             map_output=map_output, map_file=map_file,
             stealth=stealth, stealth_browser=stealth_browser,
-            static_ip=static_ip,
+            static_ip=static_ip, two_proxy=two_proxy,
             **kwargs
         )
     
@@ -652,7 +658,7 @@ def _request_vless(method, url, cf_proxies, uuid=None,
                    http2=False, impersonate=None,
                    map_output=False, map_file="cfspider_map.html",
                    stealth=False, stealth_browser='chrome',
-                   static_ip=False, **kwargs):
+                   static_ip=False, two_proxy=None, **kwargs):
     """
     使用 VLESS 协议发送请求
     
@@ -667,27 +673,33 @@ def _request_vless(method, url, cf_proxies, uuid=None,
         static_ip: 是否使用固定 IP（默认 False）
             - False: 每次请求获取新的出口 IP（适合大规模采集）
             - True: 保持使用同一个 IP（适合需要会话一致性的场景）
+        two_proxy: 第二层代理（可选）
+            格式: "host:port:user:pass"
+            流程: 本地 → Workers (VLESS) → 第二层代理 → 目标网站
         其他参数与 request() 相同
     """
     from .vless_client import LocalVlessProxy
     import uuid as uuid_mod
     
-    # 获取 Workers 配置
+    # 解析 Workers 地址获取 host
+    parsed = urlparse(cf_proxies)
+    if parsed.scheme:
+        host = parsed.netloc or parsed.path.split('/')[0]
+    else:
+        host = cf_proxies.split('/')[0]
+    
+    # 尝试从 Workers 获取配置
     config = _get_workers_config(cf_proxies)
-    if not config:
-        raise ValueError(
-            f"无法从 {cf_proxies} 获取配置。\n"
-            "请确保 Workers 已正确部署。"
-        )
     
-    # 解析配置
-    host = config.get('host')
-    is_default_uuid = config.get('is_default_uuid', True)
-    
-    # 如果用户提供了 uuid，使用用户的
-    # 如果用户没提供，尝试从 Workers 获取（仅默认 UUID 可获取）
+    # 如果用户没提供 uuid，使用 Workers 配置的 uuid
     if not uuid:
+        if not config:
+            raise ValueError(
+                f"无法从 {cf_proxies} 获取配置。\n"
+                "请确保 Workers 已正确部署，或手动指定 uuid 参数。"
+            )
         uuid = config.get('uuid')
+        host = config.get('host', host)
     
     if not uuid:
         # Workers 配置了自定义 UUID，需要用户手动填写
@@ -697,23 +709,42 @@ def _request_vless(method, url, cf_proxies, uuid=None,
             "提示: UUID 可在 Workers 界面或 Cloudflare Dashboard 中查看。"
         )
     
+    # 自动获取 Workers 配置的 two_proxy
+    # 优先级：用户传入的 two_proxy > Workers 配置的 two_proxy
+    if two_proxy is None and config:
+        # 检查 Workers 是否配置了双层代理
+        if config.get('two_proxy_enabled'):
+            # 优先使用完整的 two_proxy 配置
+            workers_two_proxy = config.get('two_proxy')
+            if workers_two_proxy:
+                two_proxy = workers_two_proxy
+            else:
+                # 尝试从 vless_path 中解析
+                vless_path = config.get('vless_path', '')
+                if 'two_proxy=' in vless_path:
+                    import re
+                    match = re.search(r'two_proxy=([^&]+)', vless_path)
+                    if match:
+                        from urllib.parse import unquote
+                        two_proxy = unquote(match.group(1))
+    
     # 构建 VLESS WebSocket URL: wss://host/uuid
     vless_url = f"wss://{host}/{uuid}"
     
     # 根据 static_ip 参数决定是否复用连接
     if static_ip:
         # 固定 IP 模式：复用同一个连接
-        cache_key = f"{host}:{uuid}"
+        cache_key = f"{host}:{uuid}:{two_proxy or ''}"
         if cache_key in _vless_proxy_cache:
             proxy = _vless_proxy_cache[cache_key]
             port = proxy.port
         else:
-            proxy = LocalVlessProxy(vless_url, uuid)
+            proxy = LocalVlessProxy(vless_url, uuid, two_proxy=two_proxy)
             port = proxy.start()
             _vless_proxy_cache[cache_key] = proxy
     else:
         # 动态 IP 模式：每次创建新连接
-        proxy = LocalVlessProxy(vless_url, uuid)
+        proxy = LocalVlessProxy(vless_url, uuid, two_proxy=two_proxy)
         port = proxy.start()
     
     # 构建本地代理 URL
@@ -827,7 +858,7 @@ def stop_vless_proxies():
 def get(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
         map_output=False, map_file="cfspider_map.html",
         stealth=False, stealth_browser='chrome', delay=None, 
-        static_ip=False, **kwargs):
+        static_ip=False, two_proxy=None, **kwargs):
     """
     发送 GET 请求 / Send GET request
     
@@ -844,6 +875,11 @@ def get(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
         static_ip: 是否使用固定 IP（默认 False）
             - False: 每次请求获取新的出口 IP（适合大规模采集）
             - True: 保持使用同一个 IP（适合需要会话一致性的场景）
+        
+        two_proxy: 第二层代理（可选）
+            格式: "host:port:user:pass" 或 "host:port"
+            例如: "us.cliproxy.io:3010:username:password"
+            流程: 本地 → Workers (VLESS) → 第二层代理 → 目标网站
         
         http2: 是否启用 HTTP/2 协议（默认 False）
         
@@ -872,90 +908,90 @@ def get(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
         ...     cf_proxies="https://cfspider.violetqqcom.workers.dev"
         ... )
         >>> 
-        >>> # 固定 IP（保持同一个 IP）
+        >>> # 使用第二层代理（通过 Workers 连接到日本代理）
         >>> response = cfspider.get(
         ...     "https://httpbin.org/ip",
         ...     cf_proxies="https://cfspider.violetqqcom.workers.dev",
-        ...     static_ip=True
+        ...     two_proxy="us.cliproxy.io:3010:username:password"
         ... )
     """
     return request("GET", url, cf_proxies=cf_proxies, uuid=uuid, 
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def post(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
          map_output=False, map_file="cfspider_map.html",
          stealth=False, stealth_browser='chrome', delay=None,
-         static_ip=False, **kwargs):
+         static_ip=False, two_proxy=None, **kwargs):
     """发送 POST 请求 / Send POST request"""
     return request("POST", url, cf_proxies=cf_proxies, uuid=uuid,
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def put(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
         map_output=False, map_file="cfspider_map.html",
         stealth=False, stealth_browser='chrome', delay=None,
-        static_ip=False, **kwargs):
+        static_ip=False, two_proxy=None, **kwargs):
     """发送 PUT 请求 / Send PUT request"""
     return request("PUT", url, cf_proxies=cf_proxies, uuid=uuid,
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def delete(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
            map_output=False, map_file="cfspider_map.html",
            stealth=False, stealth_browser='chrome', delay=None,
-           static_ip=False, **kwargs):
+           static_ip=False, two_proxy=None, **kwargs):
     """发送 DELETE 请求 / Send DELETE request"""
     return request("DELETE", url, cf_proxies=cf_proxies, uuid=uuid,
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def head(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
          map_output=False, map_file="cfspider_map.html",
          stealth=False, stealth_browser='chrome', delay=None,
-         static_ip=False, **kwargs):
+         static_ip=False, two_proxy=None, **kwargs):
     """发送 HEAD 请求 / Send HEAD request"""
     return request("HEAD", url, cf_proxies=cf_proxies, uuid=uuid,
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def options(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
             map_output=False, map_file="cfspider_map.html",
             stealth=False, stealth_browser='chrome', delay=None,
-            static_ip=False, **kwargs):
+            static_ip=False, two_proxy=None, **kwargs):
     """发送 OPTIONS 请求 / Send OPTIONS request"""
     return request("OPTIONS", url, cf_proxies=cf_proxies, uuid=uuid,
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def patch(url, cf_proxies=None, uuid=None, http2=False, impersonate=None,
           map_output=False, map_file="cfspider_map.html",
           stealth=False, stealth_browser='chrome', delay=None,
-          static_ip=False, **kwargs):
+          static_ip=False, two_proxy=None, **kwargs):
     """发送 PATCH 请求 / Send PATCH request"""
     return request("PATCH", url, cf_proxies=cf_proxies, uuid=uuid,
                    http2=http2, impersonate=impersonate,
                    map_output=map_output, map_file=map_file,
                    stealth=stealth, stealth_browser=stealth_browser, delay=delay,
-                   static_ip=static_ip, **kwargs)
+                   static_ip=static_ip, two_proxy=two_proxy, **kwargs)
 
 
 def clear_map_records():

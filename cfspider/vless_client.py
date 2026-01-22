@@ -270,20 +270,51 @@ class VlessConnection:
 class LocalVlessProxy:
     """本地 VLESS HTTP 代理服务器"""
     
-    def __init__(self, ws_url, vless_uuid=None):
+    def __init__(self, ws_url, vless_uuid=None, two_proxy=None):
         """
         初始化本地代理
         
         Args:
             ws_url: edgetunnel WebSocket 地址
             vless_uuid: VLESS UUID
+            two_proxy: 第二层代理，格式为 "host:port:user:pass"
+                       例如 "us.cliproxy.io:3010:username:password"
         """
         self.ws_url = ws_url
         self.vless_uuid = vless_uuid
+        self.two_proxy = self._parse_two_proxy(two_proxy) if two_proxy else None
         self.server = None
         self.thread = None
         self.port = None
         self.running = False
+    
+    def _parse_two_proxy(self, two_proxy):
+        """解析第二层代理配置"""
+        if not two_proxy:
+            return None
+        
+        # 格式: host:port:user:pass
+        parts = two_proxy.split(':')
+        if len(parts) == 4:
+            return {
+                'host': parts[0],
+                'port': int(parts[1]),
+                'user': parts[2],
+                'pass': parts[3]
+            }
+        elif len(parts) == 2:
+            # 无认证: host:port
+            return {
+                'host': parts[0],
+                'port': int(parts[1]),
+                'user': None,
+                'pass': None
+            }
+        else:
+            raise ValueError(
+                f"Invalid two_proxy format: {two_proxy}\n"
+                "Expected format: host:port:user:pass or host:port"
+            )
     
     def start(self):
         """启动代理服务器"""
@@ -369,9 +400,41 @@ class LocalVlessProxy:
     def _handle_connect(self, client, host, port):
         """处理 HTTPS CONNECT 请求"""
         try:
-            # 连接到 VLESS
             vless = VlessClient(self.ws_url, self.vless_uuid)
-            conn = vless.connect(host, port)
+            
+            if self.two_proxy:
+                # 使用第二层代理：通过 VLESS 连接到第二层代理
+                proxy = self.two_proxy
+                conn = vless.connect(proxy['host'], proxy['port'])
+                
+                # 向第二层代理发送 CONNECT 请求
+                connect_request = f"CONNECT {host}:{port} HTTP/1.1\r\n"
+                connect_request += f"Host: {host}:{port}\r\n"
+                
+                # 添加代理认证
+                if proxy['user'] and proxy['pass']:
+                    import base64
+                    auth = base64.b64encode(f"{proxy['user']}:{proxy['pass']}".encode()).decode()
+                    connect_request += f"Proxy-Authorization: Basic {auth}\r\n"
+                
+                connect_request += "\r\n"
+                conn.send(connect_request.encode())
+                
+                # 读取代理响应
+                response = b''
+                while b'\r\n\r\n' not in response:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        raise Exception("Second proxy connection failed")
+                    response += chunk
+                
+                # 检查代理是否连接成功
+                status_line = response.split(b'\r\n')[0].decode()
+                if '200' not in status_line:
+                    raise Exception(f"Second proxy CONNECT failed: {status_line}")
+            else:
+                # 直接连接目标
+                conn = vless.connect(host, port)
             
             # 发送连接成功
             client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
@@ -395,31 +458,64 @@ class LocalVlessProxy:
             if parsed.query:
                 path += '?' + parsed.query
             
-            # 连接到 VLESS
             vless = VlessClient(self.ws_url, self.vless_uuid)
-            conn = vless.connect(host, port)
             
-            # 重建请求
-            lines = original_request.split(b'\r\n')
-            lines[0] = f'{method} {path} HTTP/1.1'.encode('utf-8')
-            
-            # 更新 Host 头
-            new_lines = [lines[0]]
-            has_host = False
-            for line in lines[1:]:
-                if line.lower().startswith(b'host:'):
-                    new_lines.append(f'Host: {host}'.encode('utf-8'))
-                    has_host = True
-                elif line.lower().startswith(b'proxy-'):
-                    continue
-                else:
-                    new_lines.append(line)
-            
-            if not has_host:
-                new_lines.insert(1, f'Host: {host}'.encode('utf-8'))
-            
-            request = b'\r\n'.join(new_lines)
-            conn.send(request)
+            if self.two_proxy:
+                # 使用第二层代理
+                proxy = self.two_proxy
+                conn = vless.connect(proxy['host'], proxy['port'])
+                
+                # 重建请求（保留完整 URL，因为是发给代理的）
+                lines = original_request.split(b'\r\n')
+                
+                # 更新请求头
+                new_lines = [lines[0]]  # 保持原始请求行（包含完整 URL）
+                has_host = False
+                for line in lines[1:]:
+                    if line.lower().startswith(b'host:'):
+                        new_lines.append(f'Host: {host}'.encode('utf-8'))
+                        has_host = True
+                    elif line.lower().startswith(b'proxy-'):
+                        continue  # 移除原有的代理头
+                    else:
+                        new_lines.append(line)
+                
+                if not has_host:
+                    new_lines.insert(1, f'Host: {host}'.encode('utf-8'))
+                
+                # 添加代理认证
+                if proxy['user'] and proxy['pass']:
+                    import base64
+                    auth = base64.b64encode(f"{proxy['user']}:{proxy['pass']}".encode()).decode()
+                    new_lines.insert(1, f'Proxy-Authorization: Basic {auth}'.encode('utf-8'))
+                
+                request = b'\r\n'.join(new_lines)
+                conn.send(request)
+            else:
+                # 直接连接目标
+                conn = vless.connect(host, port)
+                
+                # 重建请求
+                lines = original_request.split(b'\r\n')
+                lines[0] = f'{method} {path} HTTP/1.1'.encode('utf-8')
+                
+                # 更新 Host 头
+                new_lines = [lines[0]]
+                has_host = False
+                for line in lines[1:]:
+                    if line.lower().startswith(b'host:'):
+                        new_lines.append(f'Host: {host}'.encode('utf-8'))
+                        has_host = True
+                    elif line.lower().startswith(b'proxy-'):
+                        continue
+                    else:
+                        new_lines.append(line)
+                
+                if not has_host:
+                    new_lines.insert(1, f'Host: {host}'.encode('utf-8'))
+                
+                request = b'\r\n'.join(new_lines)
+                conn.send(request)
             
             # 读取响应并转发
             self._relay_response(client, conn)

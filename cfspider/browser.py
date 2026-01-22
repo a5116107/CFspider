@@ -117,8 +117,8 @@ class Browser:
                 - CFspider Workers URL（推荐）: "https://cfspider.violetqqcom.workers.dev"
                   UUID 将自动从 Workers 获取 / UUID auto-fetched from Workers
                 - VLESS 链接: "vless://uuid@host:port?path=/xxx#name"
-                - HTTP 代理: "http://ip:port" 或 "ip:port"
-                - SOCKS5 代理: "socks5://ip:port"
+                        - HTTP 代理: "http://ip:port" 或 "ip:port"
+                        - SOCKS5 代理: "socks5://ip:port"
                 不填则直接使用本地网络 / None for direct connection
             headless (bool): 是否无头模式，默认 True / Headless mode (default: True)
             timeout (int): 请求超时时间（秒），默认 30 / Timeout in seconds (default: 30)
@@ -176,7 +176,7 @@ class Browser:
                     proxy_url = f"http://127.0.0.1:{port}"
                 else:
                     # 直接使用 HTTP 代理
-                    proxy_url = cf_proxies
+                proxy_url = cf_proxies
             # 3. IP:PORT 格式
             elif ':' in cf_proxies and cf_proxies.replace('.', '').replace(':', '').isdigit():
                 proxy_url = f"http://{cf_proxies}"
@@ -187,10 +187,10 @@ class Browser:
                 if uuid:
                     ws_url = f'wss://{hostname}/{uuid}'
                     self._vless_proxy = LocalVlessProxy(ws_url, uuid)
-                    port = self._vless_proxy.start()
-                    proxy_url = f"http://127.0.0.1:{port}"
-                else:
-                    proxy_url = f"http://{cf_proxies}"
+                port = self._vless_proxy.start()
+                proxy_url = f"http://127.0.0.1:{port}"
+            else:
+                proxy_url = f"http://{cf_proxies}"
     
     def _get_workers_uuid(self, workers_url):
         """从 Workers 获取 UUID / Get UUID from Workers"""

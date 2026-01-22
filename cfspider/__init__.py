@@ -73,6 +73,13 @@ from .batch import batch, abatch, BatchResult, BatchItem
 # 数据导出
 from .export import export
 
+# 本地代理服务器（支持双层代理）
+from .proxy_server import (
+    generate_vless_link,
+    start_proxy_server,
+    TwoProxyServer
+)
+
 # 异步 API（基于 httpx）
 from .async_api import (
     aget, apost, aput, adelete, ahead, aoptions, apatch,
@@ -210,7 +217,7 @@ class PlaywrightNotInstalledError(CFSpiderError):
     pass
 
 
-__version__ = "1.8.3"
+__version__ = "1.8.4"
 __all__ = [
     # 同步 API (requests)
     "get", "post", "put", "delete", "head", "options", "patch", "request",
@@ -242,4 +249,6 @@ __all__ = [
     "batch", "abatch", "BatchResult", "BatchItem",
     # 数据导出
     "export",
+    # 本地代理服务器（双层代理）
+    "generate_vless_link", "start_proxy_server", "TwoProxyServer",
 ]

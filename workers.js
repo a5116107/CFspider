@@ -35,8 +35,10 @@ export default {
             const newIpEnabled = env.NEW_IP !== 'false' && env.NEW_IP !== '0';
             // 检测是否使用默认 UUID（未配置环境变量）
             const isDefaultUUID = !envUUID || !uuidRegex.test(envUUID);
+            // 双层代理配置：格式为 host:port:user:pass 或 host:port
+            const twoProxy = env.TWO_PROXY || env.two_proxy || '';
             if (cfspiderPath === '' || cfspiderPath === '/') {
-                return new Response(generateCFspiderPage(request, url, 访问IP, userID, newIpEnabled, isDefaultUUID), {
+                return new Response(generateCFspiderPage(request, url, 访问IP, userID, newIpEnabled, isDefaultUUID, twoProxy), {
                     headers: { 'Content-Type': 'text/html; charset=utf-8' }
                 });
             }
@@ -50,7 +52,7 @@ export default {
             if (cfspiderPath === 'api/status') {
                 return new Response(JSON.stringify({
                     status: 'online',
-                    version: '1.8.3',
+                    version: '1.8.4',
                     colo: request.cf?.colo || 'unknown',
                     uptime: Date.now() - (globalThis.START_TIME || Date.now())
                 }), { headers: { 'Content-Type': 'application/json' } });
@@ -59,18 +61,34 @@ export default {
             if (cfspiderPath === 'api/uuid' || cfspiderPath === 'api/config') {
                 // 从环境变量读取 new_ip 设置，默认为 true
                 const newIpEnabled = env.NEW_IP !== 'false' && env.NEW_IP !== '0';
+                // 双层代理配置
+                const twoProxyConfig = env.TWO_PROXY || env.two_proxy || '';
                 // 如果配置了自定义 UUID，不公开返回（需要用户手动填写）
                 // 只有使用默认 UUID 时才公开返回
                 const configResponse = {
                     host: url.hostname,
                     new_ip: newIpEnabled,
-                    version: '1.8.2',
-                    is_default_uuid: isDefaultUUID
+                    version: '1.8.4',
+                    is_default_uuid: isDefaultUUID,
+                    two_proxy_enabled: !!twoProxyConfig
                 };
                 // 只有默认 UUID 才公开返回 uuid 字段
                 if (isDefaultUUID) {
                     configResponse.uuid = userID;
-                    configResponse.vless_path = '/' + userID;
+                    configResponse.vless_path = twoProxyConfig 
+                        ? '/' + userID + '?two_proxy=' + encodeURIComponent(twoProxyConfig)
+                        : '/' + userID;
+                } else {
+                    // 即使不返回 uuid，也返回 vless_path（不含 uuid）供客户端解析 two_proxy
+                    if (twoProxyConfig) {
+                        configResponse.two_proxy = twoProxyConfig;  // 返回完整的双层代理配置
+                    }
+                }
+                // 如果启用双层代理，返回代理主机信息
+                if (twoProxyConfig) {
+                    const parts = twoProxyConfig.split(':');
+                    configResponse.two_proxy_host = parts[0] || '';
+                    configResponse.two_proxy_port = parts[1] || '';
                 }
                 return new Response(JSON.stringify(configResponse), { 
                 headers: { 
@@ -155,7 +173,7 @@ export default {
                             检测代理响应 = await SOCKS5可用性验证('socks5', url.searchParams.get('socks5'));
                         } else if (url.searchParams.has('http')) {
                             检测代理响应 = await SOCKS5可用性验证('http', url.searchParams.get('http'));
-                        } else {
+        } else {
                             return new Response(JSON.stringify({ error: '缺少代理参数' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                         }
                         return new Response(JSON.stringify(检测代理响应, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
@@ -406,7 +424,18 @@ export default {
             } else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
         } else if (管理员密码) {// ws代理
             await 反代参数获取(request);
-            return await 处理WS请求(request, userID);
+            // 解析 URL 中的 two_proxy 参数（双层代理）
+            const urlPath = new URL(request.url).pathname;
+            let twoProxyFromPath = '';
+            if (urlPath.includes('two_proxy=')) {
+                const match = urlPath.match(/two_proxy=([^&]+)/);
+                if (match) {
+                    twoProxyFromPath = decodeURIComponent(decodeURIComponent(match[1]));
+                }
+            }
+            // 优先使用 URL 参数，其次使用环境变量
+            const twoProxyConfig = twoProxyFromPath || env.TWO_PROXY || env.two_proxy || '';
+            return await 处理WS请求(request, userID, twoProxyConfig);
         }
 
         let 伪装页URL = env.URL || 'nginx';
@@ -436,7 +465,7 @@ export default {
     }
 };
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
-async function 处理WS请求(request, yourUUID) {
+async function 处理WS请求(request, yourUUID, twoProxy = '') {
     const wssPair = new WebSocketPair();
     const [clientSock, serverSock] = Object.values(wssPair);
     serverSock.accept();
@@ -445,6 +474,22 @@ async function 处理WS请求(request, yourUUID) {
     const earlyData = request.headers.get('sec-websocket-protocol') || '';
     const readable = makeReadableStr(serverSock, earlyData);
     let 判断是否是木马 = null;
+    
+    // 解析双层代理配置
+    let twoProxyParsed = null;
+    if (twoProxy) {
+        const parts = twoProxy.split(':');
+        if (parts.length >= 2) {
+            twoProxyParsed = {
+                hostname: parts[0],
+                port: parseInt(parts[1], 10),
+                username: parts[2] || '',
+                password: parts[3] || ''
+            };
+            console.log(`[双层代理] 已启用: ${twoProxyParsed.hostname}:${twoProxyParsed.port}`);
+        }
+    }
+    
     readable.pipeTo(new WritableStream({
         async write(chunk) {
             if (isDnsQuery) return await forwardataudp(chunk, serverSock, null);
@@ -470,7 +515,7 @@ async function 处理WS请求(request, yourUUID) {
             if (判断是否是木马) {
                 const { port, hostname, rawClientData } = 解析木马请求(chunk, yourUUID);
                 if (isSpeedTestSite(hostname)) throw new Error('Speedtest site is blocked');
-                await forwardataTCP(hostname, port, rawClientData, serverSock, null, remoteConnWrapper, yourUUID);
+                await forwardataTCP(hostname, port, rawClientData, serverSock, null, remoteConnWrapper, yourUUID, twoProxyParsed);
             } else {
                 const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
                 if (isSpeedTestSite(hostname)) throw new Error('Speedtest site is blocked');
@@ -481,7 +526,7 @@ async function 处理WS请求(request, yourUUID) {
                 const respHeader = new Uint8Array([version[0], 0]);
                 const rawData = chunk.slice(rawIndex);
                 if (isDnsQuery) return forwardataudp(rawData, serverSock, respHeader);
-                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
+                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID, twoProxyParsed);
             }
         },
     })).catch((err) => {
@@ -585,8 +630,8 @@ function 解析魏烈思请求(chunk, token) {
     if (!hostname) return { hasError: true, message: `Invalid address: ${addressType}` };
     return { hasError: false, addressType, port, hostname, isUDP, rawIndex: addrValIdx + addrLen, version };
 }
-async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
-    console.log(`[TCP转发] 目标: ${host}:${portNum} | 反代IP: ${反代IP} | 反代兜底: ${启用反代兜底 ? '是' : '否'} | 反代类型: ${启用SOCKS5反代 || 'proxyip'} | 全局: ${启用SOCKS5全局反代 ? '是' : '否'}`);
+async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID, twoProxy = null) {
+    console.log(`[TCP转发] 目标: ${host}:${portNum} | 反代IP: ${反代IP} | 双层代理: ${twoProxy ? twoProxy.hostname + ':' + twoProxy.port : '否'} | 反代类型: ${启用SOCKS5反代 || 'proxyip'}`);
 
     async function connectDirect(address, port, data, 所有反代数组 = null, 反代兜底 = true) {
         let remoteSock;
@@ -646,8 +691,91 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         connectStreams(newSocket, ws, respHeader, null);
     }
 
+    // 双层代理连接函数
+    async function connectViaTwoProxy() {
+        if (!twoProxy) throw new Error('双层代理未配置');
+        console.log(`[双层代理] 通过 ${twoProxy.hostname}:${twoProxy.port} 连接到 ${host}:${portNum}`);
+        
+        const socket = connect({ hostname: twoProxy.hostname, port: twoProxy.port });
+        const writer = socket.writable.getWriter();
+        const reader = socket.readable.getReader();
+        
+        try {
+            // 构建 HTTP CONNECT 请求
+            const auth = twoProxy.username && twoProxy.password 
+                ? `Proxy-Authorization: Basic ${btoa(`${twoProxy.username}:${twoProxy.password}`)}\r\n` 
+                : '';
+            const connectRequest = `CONNECT ${host}:${portNum} HTTP/1.1\r\nHost: ${host}:${portNum}\r\n${auth}User-Agent: CFspider/1.8.3\r\nConnection: keep-alive\r\n\r\n`;
+            
+            await writer.write(new TextEncoder().encode(connectRequest));
+            
+            // 读取代理响应
+            let responseBuffer = new Uint8Array(0);
+            let headerEndIndex = -1;
+            let bytesRead = 0;
+            
+            while (headerEndIndex === -1 && bytesRead < 8192) {
+                const { done, value } = await reader.read();
+                if (done) throw new Error('代理连接关闭');
+                responseBuffer = new Uint8Array([...responseBuffer, ...value]);
+                bytesRead = responseBuffer.length;
+                
+                // 查找 \r\n\r\n
+                for (let i = 0; i < responseBuffer.length - 3; i++) {
+                    if (responseBuffer[i] === 0x0d && responseBuffer[i + 1] === 0x0a && 
+                        responseBuffer[i + 2] === 0x0d && responseBuffer[i + 3] === 0x0a) {
+                        headerEndIndex = i + 4;
+                        break;
+                    }
+                }
+            }
+            
+            if (headerEndIndex === -1) throw new Error('无效的代理响应');
+            
+            const responseText = new TextDecoder().decode(responseBuffer.slice(0, headerEndIndex));
+            const statusMatch = responseText.match(/HTTP\/\d\.\d\s+(\d+)/);
+            const statusCode = statusMatch ? parseInt(statusMatch[1]) : 0;
+            
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new Error(`代理连接失败: HTTP ${statusCode}`);
+            }
+            
+            console.log(`[双层代理] 隧道建立成功: ${host}:${portNum}`);
+            
+            // 发送原始数据
+            await writer.write(rawData);
+            writer.releaseLock();
+            reader.releaseLock();
+            
+            return socket;
+        } catch (error) {
+            try { writer.releaseLock(); } catch (e) { }
+            try { reader.releaseLock(); } catch (e) { }
+            try { socket.close(); } catch (e) { }
+            throw error;
+        }
+    }
+
     const 验证SOCKS5白名单 = (addr) => SOCKS5白名单.some(p => new RegExp(`^${p.replace(/\*/g, '.*')}$`, 'i').test(addr));
-    if (启用SOCKS5反代 && (启用SOCKS5全局反代 || 验证SOCKS5白名单(host))) {
+    
+    // 优先使用双层代理
+    if (twoProxy) {
+        console.log(`[TCP转发] 使用双层代理`);
+        try {
+            const proxySocket = await connectViaTwoProxy();
+            remoteConnWrapper.socket = proxySocket;
+            proxySocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
+            connectStreams(proxySocket, ws, respHeader, null);
+        } catch (err) {
+            console.log(`[双层代理] 连接失败: ${err.message}, 回退到默认方式`);
+            // 回退到默认方式
+            try {
+                await connecttoPry();
+            } catch (err2) {
+                throw err2;
+            }
+        }
+    } else if (启用SOCKS5反代 && (启用SOCKS5全局反代 || 验证SOCKS5白名单(host))) {
         console.log(`[TCP转发] 启用 SOCKS5/HTTP 全局代理`);
         try {
             await connecttoPry();
@@ -780,7 +908,7 @@ function base64ToArray(b64Str) {
             bytes[i] = binaryString.charCodeAt(i);
         }
         return { earlyData: bytes.buffer, error: null };
-    } catch (error) {
+            } catch (error) {
         return { error };
     }
 }
@@ -2162,7 +2290,7 @@ function generateIPPool(request) {
     return { pool: ipPool, total: ipPool.length, online: ipPool.length };
 }
 
-function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = true, isDefaultUUID = false) {
+function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = true, isDefaultUUID = false, twoProxy = '') {
     const colo = request.cf?.colo || 'UNKNOWN';
     const country = request.cf?.country || 'XX';
     const city = request.cf?.city || 'Night City';
@@ -2173,13 +2301,32 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
     const longitude = request.cf?.longitude || '0';
     const continent = request.cf?.continent || 'XX';
     const lang = url.searchParams.get('lang') || 'zh';
-    const VERSION = '1.8.3';
+    const VERSION = '1.8.4';
+    
+    // 解析双层代理配置
+    let twoProxyHost = '', twoProxyPort = '', twoProxyUser = '', twoProxyPass = '', twoProxyEnabled = false;
+    if (twoProxy) {
+        const parts = twoProxy.split(':');
+        if (parts.length >= 2) {
+            twoProxyHost = parts[0];
+            twoProxyPort = parts[1];
+            twoProxyUser = parts[2] || '';
+            twoProxyPass = parts[3] || '';
+            twoProxyEnabled = true;
+        }
+    }
     
     // VLESS 配置
     const vlessHost = url.hostname;
     const vlessPort = '443';
-    const vlessPath = '/' + userID;
-    const vlessLink = userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(vlessPath)}&encryption=none#CFspider-${colo}` : '';
+    // 如果启用双层代理，在 path 中携带代理信息
+    const vlessPath = twoProxyEnabled 
+        ? '/' + userID + '?two_proxy=' + encodeURIComponent(twoProxy)
+        : '/' + userID;
+    const vlessLink = userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(vlessPath)}&encryption=none#CFspider-${colo}${twoProxyEnabled ? '-2P' : ''}` : '';
+    
+    // 双层代理专用链接（出口为第二层代理 IP）
+    const twoProxyLink = twoProxyEnabled && userID ? `vless://${userID}@${vlessHost}:${vlessPort}?security=tls&type=ws&host=${vlessHost}&sni=${vlessHost}&path=${encodeURIComponent(vlessPath)}&encryption=none#CFspider-TwoProxy-${twoProxyHost.split('.')[0]}` : '';
     
     const countryNames = {
         'JP': '日本', 'CN': '中国', 'US': '美国', 'HK': '香港', 'TW': '台湾',
@@ -2213,7 +2360,17 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             newIp: '动态 IP', transport: '传输协议', security: '安全协议', encryption: '加密方式',
             credits: 'VLESS 技术基于 edgetunnel 项目',
             v2rayClients: '支持的客户端',
-            copySuccess: '已复制!'
+            copySuccess: '已复制!',
+            twoProxyTitle: '双层代理配置',
+            twoProxyHost: '第二层代理',
+            twoProxyPort: '代理端口',
+            twoProxyAuth: '认证信息',
+            twoProxyEnabled: '已启用',
+            twoProxyDisabled: '未配置',
+            twoProxyLink: '双层代理链接',
+            twoProxyDesc: '流量路径: 本地 → Workers (VLESS) → 第二层代理 → 目标网站',
+            twoProxyEnvHint: '设置环境变量 TWO_PROXY 启用双层代理',
+            exitIp: '出口 IP'
         },
         en: {
             subtitle: 'Cloudflare VLESS Proxy Network',
@@ -2231,7 +2388,17 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             newIp: 'Dynamic IP', transport: 'Transport', security: 'Security', encryption: 'Encryption',
             credits: 'VLESS based on edgetunnel project',
             v2rayClients: 'Supported Clients',
-            copySuccess: 'Copied!'
+            copySuccess: 'Copied!',
+            twoProxyTitle: 'Two-Layer Proxy',
+            twoProxyHost: 'Second Proxy',
+            twoProxyPort: 'Proxy Port',
+            twoProxyAuth: 'Authentication',
+            twoProxyEnabled: 'Enabled',
+            twoProxyDisabled: 'Not Configured',
+            twoProxyLink: 'Two-Proxy Link',
+            twoProxyDesc: 'Traffic: Local → Workers (VLESS) → Second Proxy → Target',
+            twoProxyEnvHint: 'Set TWO_PROXY env variable to enable',
+            exitIp: 'Exit IP'
         }
     };
     
@@ -2637,11 +2804,11 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             <div class="vless-header">
                 <div class="vless-title-main">
                     <span>VLESS PROXY</span>
-                </div>
+            </div>
                 <div class="vless-status">
                     <div class="status-pill active"><span class="status-dot"></span> ${t.online}</div>
                     <div class="status-pill">${t.newIp}: ON</div>
-                </div>
+            </div>
             </div>
             
             ${isDefaultUUID ? `
@@ -2651,7 +2818,7 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
                     <div class="warning-title">Security Notice</div>
                     <div class="warning-text">${t.defaultUuidWarning}</div>
                     <div class="warning-path">Dashboard → Workers → Settings → Variables → Add "UUID"</div>
-                </div>
+            </div>
             </div>
             ` : ''}
             
@@ -2661,40 +2828,40 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
                     <div class="config-item">
                         <span class="config-label">${t.vlessHost}</span>
                         <span class="config-value">${vlessHost}</span>
-                    </div>
+                </div>
                     <div class="config-item">
                         <span class="config-label">${t.vlessPort}</span>
                         <span class="config-value">443</span>
-                    </div>
+                </div>
                     <div class="config-item">
                         <span class="config-label">${t.transport}</span>
                         <span class="config-value">WebSocket</span>
-                    </div>
+                </div>
                     <div class="config-item">
                         <span class="config-label">${t.security}</span>
                         <span class="config-value success">TLS</span>
-                    </div>
+                </div>
                 </div>
                 <div class="config-card">
                     <div class="config-card-title">Authentication</div>
                     <div class="config-item">
                         <span class="config-label">${t.vlessUUID}</span>
                         <span class="config-value uuid">${userID}</span>
-                    </div>
+                </div>
                     <div class="config-item">
                         <span class="config-label">Path</span>
                         <span class="config-value">/${userID.substring(0,8)}...</span>
-                    </div>
+                </div>
                     <div class="config-item">
                         <span class="config-label">${t.encryption}</span>
                         <span class="config-value">none</span>
-                    </div>
+            </div>
                     <div class="config-item">
                         <span class="config-label">Status</span>
                         <span class="config-value success">${isDefaultUUID ? 'Public' : 'Private'}</span>
-                    </div>
                 </div>
-            </div>
+                </div>
+                </div>
             
             <div class="vless-link-box" onclick="copyVlessLink(this)">
                 <span class="copy-hint" id="copyHint">${t.vlessCopy}</span>
@@ -2702,8 +2869,8 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
                     <span>${t.vlessLink}</span>
                 </div>
                 <div class="vless-link-text" id="vlessLink">${vlessLink}</div>
-            </div>
-            
+        </div>
+        
             <div class="clients-section">
                 <div class="clients-title">${t.v2rayClients}</div>
                 <div class="clients-grid">
@@ -2715,8 +2882,49 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
                     <span class="client-tag">NekoRay</span>
                     <span class="client-tag">Surge</span>
                     <span class="client-tag">Quantumult X</span>
+            </div>
+            </div>
+            </div>
+        ` : ''}
+        
+        <!-- Two-Proxy Section -->
+        ${userID ? `
+        <div class="two-proxy-section" style="background: ${twoProxyEnabled ? 'linear-gradient(135deg, rgba(63,185,80,0.15) 0%, rgba(88,166,255,0.15) 100%)' : 'var(--bg-secondary)'}; border: ${twoProxyEnabled ? '2px solid var(--accent-green)' : '1px solid var(--border-color)'}; border-radius: 16px; padding: 24px; margin-bottom: 32px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; color: ${twoProxyEnabled ? 'var(--accent-green)' : 'var(--text-secondary)'}; display: flex; align-items: center; gap: 10px;">
+                    <span>🔗</span>
+                    <span>${t.twoProxyTitle}</span>
+                </div>
+                <div class="status-pill ${twoProxyEnabled ? 'active' : ''}" style="background: var(--bg-tertiary); border: 1px solid ${twoProxyEnabled ? 'var(--accent-green)' : 'var(--border-color)'}; padding: 6px 14px; border-radius: 20px; font-size: 0.8rem;">
+                    ${twoProxyEnabled ? '<span class="status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); animation: pulse 2s infinite; display: inline-block; margin-right: 6px;"></span>' : ''}
+                    ${twoProxyEnabled ? t.twoProxyEnabled : t.twoProxyDisabled}
                 </div>
             </div>
+            
+            ${twoProxyEnabled ? `
+            <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <div style="font-size: 0.8rem; color: var(--accent-cyan); margin-bottom: 8px;">${t.twoProxyDesc}</div>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.9rem;">
+                    <div><span style="color: var(--text-secondary);">${t.twoProxyHost}:</span> <span style="color: var(--accent-green);">${twoProxyHost}</span></div>
+                    <div><span style="color: var(--text-secondary);">${t.twoProxyPort}:</span> <span style="color: var(--text-primary);">${twoProxyPort}</span></div>
+                    <div><span style="color: var(--text-secondary);">${t.twoProxyAuth}:</span> <span style="color: ${twoProxyUser ? 'var(--accent-yellow)' : 'var(--text-secondary)'};">${twoProxyUser ? twoProxyUser.substring(0, 8) + '***' : 'None'}</span></div>
+                </div>
+            </div>
+            
+            <div class="vless-link-box" onclick="copyTwoProxyLink(this)" style="background: var(--bg-primary); border: 2px solid var(--accent-green); border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.3s; position: relative;">
+                <span class="copy-hint" id="copyHint2" style="position: absolute; top: 16px; right: 16px; font-size: 0.75rem; color: var(--text-secondary); background: var(--bg-tertiary); padding: 4px 10px; border-radius: 4px;">${t.vlessCopy}</span>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <span>🚀</span>
+                    <span>${t.twoProxyLink} (${t.exitIp}: ${twoProxyHost})</span>
+                </div>
+                <div class="vless-link-text" id="twoProxyLinkText" style="font-size: 0.85rem; color: var(--accent-green); word-break: break-all; line-height: 1.8; padding: 12px; background: var(--bg-secondary); border-radius: 8px; user-select: all;">${twoProxyLink}</div>
+            </div>
+            ` : `
+            <div style="background: var(--bg-primary); border: 1px dashed var(--border-color); border-radius: 8px; padding: 20px; text-align: center;">
+                <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 8px;">${t.twoProxyEnvHint}</div>
+                <div style="font-size: 0.8rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">TWO_PROXY=host:port:user:pass</div>
+            </div>
+            `}
         </div>
         ` : ''}
         
@@ -2739,14 +2947,14 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
                 <div class="info-row"><span class="info-label">${t.city}</span><span class="info-value">${cityName}</span></div>
                 <div class="info-row"><span class="info-label">${t.asn}</span><span class="info-value">AS${asn}</span></div>
                 <div class="info-row"><span class="info-label">${t.timezone}</span><span class="info-value">${timezone}</span></div>
-            </div>
+                </div>
             <div class="info-panel">
                 <div class="panel-title">${t.visitorInfoTitle}</div>
                 <div class="info-row"><span class="info-label">${t.visitorIP}</span><span class="info-value">${visitorIP}</span></div>
                 <div class="info-row"><span class="info-label">${t.country}</span><span class="info-value">${countryName}</span></div>
                 <div class="info-row"><span class="info-label">${t.asn}</span><span class="info-value">AS${asn}</span></div>
                 <div class="info-row"><span class="info-label">${t.coordinates}</span><span class="info-value">${latitude}, ${longitude}</span></div>
-            </div>
+                </div>
         </div>
         
         <!-- Code Example -->
@@ -2756,11 +2964,11 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
 
 <span class="code-comment"># ${lang === 'zh' ? '使用 CFspider 代理池获取不同 IP' : 'Use CFspider proxy pool for different IPs'}</span>
 <span class="code-keyword">for</span> i <span class="code-keyword">in</span> range(<span class="code-string">5</span>):
-    response = cfspider.<span class="code-function">get</span>(
-        <span class="code-string">"https://httpbin.org/ip"</span>,
+response = cfspider.<span class="code-function">get</span>(
+    <span class="code-string">"https://httpbin.org/ip"</span>,
         cf_proxies=<span class="code-string">"https://your-workers.dev"</span>${isDefaultUUID ? '' : `,
         uuid=<span class="code-string">"your-uuid-here"</span>`}
-    )
+)
     <span class="code-function">print</span>(response.json())
 
 <span class="code-comment"># ${lang === 'zh' ? '固定 IP 模式 - 保持同一出口 IP' : 'Static IP mode - keep same IP'}</span>
@@ -2806,6 +3014,23 @@ response = cfspider.<span class="code-function">get</span>(
                 setTimeout(() => {
                     hint.textContent = '${t.vlessCopy}';
                     hint.classList.remove('copy-success');
+                }, 2000);
+            });
+        }
+        
+        function copyTwoProxyLink(el) {
+            const linkEl = document.getElementById('twoProxyLinkText');
+            if (!linkEl) return;
+            const link = linkEl.innerText;
+            const hint = document.getElementById('copyHint2');
+            navigator.clipboard.writeText(link).then(() => {
+                hint.textContent = '${t.copySuccess}';
+                hint.style.background = 'var(--accent-green)';
+                hint.style.color = '#fff';
+                setTimeout(() => {
+                    hint.textContent = '${t.vlessCopy}';
+                    hint.style.background = 'var(--bg-tertiary)';
+                    hint.style.color = 'var(--text-secondary)';
                 }, 2000);
             });
         }

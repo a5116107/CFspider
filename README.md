@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/cfspider)](https://pypi.org/project/cfspider/)
 [![License](https://img.shields.io/github/license/violettoolssite/CFspider)](LICENSE)
 
-**v1.8.3** - 基于 VLESS 协议的免费代理 IP 池，利用 Cloudflare 全球 300+ 边缘节点作为出口，**完全隐藏 CF 特征**，支持隐身模式、TLS 指纹模拟、网页镜像和浏览器自动化。
+**v1.8.4** - 基于 VLESS 协议的免费代理 IP 池，利用 Cloudflare 全球 300+ 边缘节点作为出口，**完全隐藏 CF 特征**，支持隐身模式、TLS 指纹模拟、网页镜像和浏览器自动化。
 
 ---
 
@@ -39,7 +39,7 @@
 vless://你的UUID@your-workers.dev:443?encryption=none&security=tls&type=ws&host=your-workers.dev&path=%2F你的UUID#CFspider
 ```
 
-## v1.8.3 新特性
+## v1.8.4 新特性
 
 | 特性 | 说明 |
 |------|------|
@@ -47,12 +47,94 @@ vless://你的UUID@your-workers.dev:443?encryption=none&security=tls&type=ws&hos
 | **v2ray 支持** | 支持 v2rayN/v2rayNG/Clash 等客户端直接使用 |
 | **动态 IP 池** | 每次请求自动获取新的出口 IP，从 300+ 全球节点选择 |
 | **固定 IP 模式** | 新增 `static_ip` 参数，支持保持同一 IP 进行多次请求 |
+| **双层代理** | 新增 `two_proxy` 参数，支持通过第二层代理出口（自定义出口 IP 地区） |
 | **UUID 安全** | 支持自定义 UUID，配置后需手动填写，默认 UUID 界面显示警告 |
 | **简化 API** | 只需填写 Workers 地址，自动获取配置 |
 
+## 双层代理（指定出口 IP 地区）
+
+> **需要指定出口 IP 地区？** 通过双层代理功能，可以让流量经过第二层代理服务器出口，获得特定地区的 IP 地址。
+
+**流量路径：**
+```
+本地 → Cloudflare Workers (VLESS) → 第二层代理 → 目标网站
+```
+
+### 为什么需要双层代理？
+
+| 场景 | 默认模式 | 双层代理模式 |
+|------|---------|-------------|
+| 出口 IP | Cloudflare WARP（荷兰/美国等） | 第二层代理的 IP（可指定地区） |
+| IP 类型 | 数据中心 IP | 可选住宅/移动 IP |
+| 适用场景 | 一般爬虫、匿名访问 | 需要特定地区 IP、住宅 IP 的场景 |
+
+### 使用方式
+
+**方式 1：Workers 环境变量配置（推荐）**
+
+在 Cloudflare Dashboard 或使用 wrangler 配置：
+
+```bash
+# 格式: host:port:user:pass
+echo "us.cliproxy.io:3010:username:password" | npx wrangler secret put TWO_PROXY --name cfspider
+```
+
+配置后，Python 和 v2ray 客户端都会自动使用双层代理：
+
+```python
+import cfspider
+
+# 自动使用 Workers 配置的双层代理
+response = cfspider.get(
+    "https://httpbin.org/ip",
+    cf_proxies="https://your-workers.dev",
+    uuid="your-uuid"
+)
+print(response.json())  # 出口 IP 为第二层代理的 IP
+```
+
+**方式 2：Python 参数指定**
+
+```python
+import cfspider
+
+# 手动指定第二层代理（优先级高于 Workers 配置）
+response = cfspider.get(
+    "https://httpbin.org/ip",
+    cf_proxies="https://your-workers.dev",
+    uuid="your-uuid",
+    two_proxy="us.cliproxy.io:3010:username:password"
+)
+print(response.json())  # 出口 IP 为第二层代理的 IP
+```
+
+### 配置优先级
+
+| Workers `TWO_PROXY` | Python `two_proxy` | 结果 |
+|---------------------|--------------------|----- |
+| ✅ 已配置 | ❌ 不传 | 自动使用 Workers 配置 |
+| ❌ 未配置 | ✅ 传入 | 使用 Python 参数 |
+| ✅ 已配置 | ✅ 传入 | **Python 参数优先** |
+| ❌ 未配置 | ❌ 不传 | 使用 Cloudflare WARP IP |
+
+### 代理 IP 购买
+
+如需购买高质量的代理 IP（支持住宅 IP、移动 IP、指定地区），推荐：
+
+- **Cliproxy**: [https://dash.cliproxy.com/](https://dash.cliproxy.com/) - 支持 HTTP/SOCKS5 代理，覆盖全球多个地区
+
+代理格式示例：
+```
+# HTTP 代理格式
+host:port:username:password
+
+# 示例
+us.cliproxy.io:3010:2e75108689-region-JP:password123
+```
+
 ## 核心优势：VLESS 动态 IP 池
 
-> **CFspider v1.8.3 采用 VLESS 协议**，每次请求自动获取新的出口 IP，自动从 300+ 全球节点中选择最优节点。**完全隐藏 Cloudflare 特征**（无 CF-Ray、CF-Worker、Cf-Connecting-Ip 等头），实现真正的匿名代理。
+> **CFspider v1.8.4 采用 VLESS 协议**，每次请求自动获取新的出口 IP，自动从 300+ 全球节点中选择最优节点。**完全隐藏 Cloudflare 特征**（无 CF-Ray、CF-Worker、Cf-Connecting-Ip 等头），实现真正的匿名代理。
 
 ### 动态 IP 池的优势
 
