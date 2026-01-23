@@ -135,38 +135,50 @@ class WebMirror:
         'other': []
     }
     
-    def __init__(self, cf_proxies=None, vless_uuid=None, timeout=30, max_workers=10):
+    def __init__(self, cf_proxies=None, uuid=None, timeout=30, max_workers=10, two_proxy=None):
         """
         初始化镜像器
         
+        ⚠️ 需要 UUID（使用 VLESS 协议，支持双层代理）
+        
         Args:
             cf_proxies (str, optional): 代理地址，支持以下格式：
+                - CFspider Workers URL: "https://your-workers.dev"（UUID 可自动获取）
                 - VLESS 链接："vless://uuid@host:port?path=/..."
                 - HTTP 代理："http://ip:port"
                 - SOCKS5 代理："socks5://ip:port"
                 - 不填写：直接请求（无代理）
                 注意：浏览器渲染使用 VLESS 代理，资源下载使用直连
-            vless_uuid (str, optional): VLESS UUID
-                仅当 cf_proxies 是域名（非完整链接）时需要
+            uuid (str, optional): VLESS UUID（可选，不填则自动获取）
             timeout (int): 请求超时时间（秒），默认 30
                 适用于浏览器渲染和资源下载
             max_workers (int): 并发下载线程数，默认 10
                 增大可加快下载速度，但可能被目标网站限制
+            two_proxy (str, optional): 双层代理配置，格式 "host:port:user:pass"
+                用于国内无法直连时使用第二层代理
         
         Example:
             >>> # 无代理
             >>> mirrorer = WebMirror()
             >>> 
-            >>> # VLESS 代理
-            >>> mirrorer = WebMirror(cf_proxies="vless://uuid@host:443?path=/")
+            >>> # 使用 Workers 代理（UUID 自动获取）
+            >>> mirrorer = WebMirror(cf_proxies="https://your-workers.dev")
+            >>> 
+            >>> # 使用双层代理
+            >>> mirrorer = WebMirror(
+            ...     cf_proxies="https://your-workers.dev",
+            ...     uuid="your-uuid",
+            ...     two_proxy="us.cliproxy.io:3010:user:pass"
+            ... )
             >>> 
             >>> # 高并发
             >>> mirrorer = WebMirror(max_workers=20, timeout=60)
         """
         self.cf_proxies = cf_proxies
-        self.vless_uuid = vless_uuid
+        self.uuid = uuid
         self.timeout = timeout
         self.max_workers = max_workers
+        self.two_proxy = two_proxy
         self._browser = None
         self._downloaded: Dict[str, str] = {}  # URL -> 本地路径映射
         self._failed: Set[str] = set()
@@ -179,7 +191,8 @@ class WebMirror:
                 cf_proxies=self.cf_proxies,
                 headless=True,
                 timeout=self.timeout,
-                uuid=self.vless_uuid
+                uuid=self.uuid,
+                two_proxy=self.two_proxy
             )
         return self._browser
     
@@ -632,10 +645,12 @@ class WebMirror:
 
 
 def mirror(url: str, save_dir: str = "./mirror", open_browser: bool = True,
-           cf_proxies: str = None, vless_uuid: str = None, 
+           cf_proxies: str = None, uuid: str = None, two_proxy: str = None,
            timeout: int = 30, max_workers: int = 10) -> MirrorResult:
     """
     镜像网页到本地
+    
+    ⚠️ 需要 UUID（使用 VLESS 协议，支持双层代理）
     
     爬取网页及其所有资源（CSS、JS、图片、字体等），
     保存到本地并自动打开浏览器预览。
@@ -644,8 +659,9 @@ def mirror(url: str, save_dir: str = "./mirror", open_browser: bool = True,
         url: 目标网页 URL
         save_dir: 保存目录，默认 "./mirror"
         open_browser: 是否自动打开浏览器预览，默认 True
-        cf_proxies: 代理地址，支持 VLESS 链接/HTTP/SOCKS5
-        vless_uuid: VLESS UUID（仅域名方式需要）
+        cf_proxies: 代理地址，支持 Workers URL/VLESS 链接/HTTP/SOCKS5
+        uuid: VLESS UUID（可选，不填则自动获取）
+        two_proxy: 双层代理配置，格式 "host:port:user:pass"
         timeout: 请求超时时间（秒），默认 30
         max_workers: 并发下载线程数，默认 10
         
@@ -659,24 +675,26 @@ def mirror(url: str, save_dir: str = "./mirror", open_browser: bool = True,
         >>> result = cfspider.mirror("https://example.com")
         >>> print(result.index_file)  # 保存的 HTML 路径
         >>> 
-        >>> # 指定保存目录
+        >>> # 使用 Workers 代理
         >>> result = cfspider.mirror(
         ...     "https://example.com",
-        ...     save_dir="./my_mirror",
-        ...     open_browser=False
+        ...     cf_proxies="https://your-workers.dev"
         ... )
         >>> 
-        >>> # 使用 VLESS 代理
+        >>> # 使用双层代理
         >>> result = cfspider.mirror(
         ...     "https://example.com",
-        ...     cf_proxies="vless://uuid@host:443?path=/"
+        ...     cf_proxies="https://your-workers.dev",
+        ...     uuid="your-uuid",
+        ...     two_proxy="us.cliproxy.io:3010:user:pass"
         ... )
     """
     mirrorer = WebMirror(
         cf_proxies=cf_proxies,
-        vless_uuid=vless_uuid,
+        uuid=uuid,
         timeout=timeout,
-        max_workers=max_workers
+        max_workers=max_workers,
+        two_proxy=two_proxy
     )
     return mirrorer.mirror(url, save_dir, open_browser)
 
