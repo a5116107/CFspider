@@ -32,6 +32,8 @@ class AsyncSession:
         headers: Optional[Dict[str, str]] = None,
         cookies: Optional[Dict[str, str]] = None,
         token: Optional[str] = None,
+        uuid: Optional[str] = None,
+        two_proxy: Optional[str] = None,
         **kwargs
     ):
         """
@@ -45,6 +47,8 @@ class AsyncSession:
             headers: 默认请求头
             cookies: 默认 Cookies
             token: CFspider Workers API token（选填）
+            uuid: VLESS UUID（选填）
+            two_proxy: 双层代理地址，格式 host:port:user:pass（选填）
             **kwargs: 传递给 httpx.AsyncClient 的其他参数
         """
         self.cf_proxies = cf_proxies
@@ -54,6 +58,8 @@ class AsyncSession:
         self.headers = headers or {}
         self.cookies = cookies or {}
         self.token = token
+        self.uuid = uuid
+        self.two_proxy = two_proxy
         self._client_kwargs = kwargs
         self._client: Optional[httpx.AsyncClient] = None
     
@@ -148,6 +154,16 @@ class AsyncSession:
         proxy_url = f"{cf_proxies_url}/proxy?url={quote(target_url, safe='')}&method={method.upper()}"
         if self.token:
             proxy_url += f"&token={quote(self.token, safe='')}"
+        
+        # 获取 two_proxy（优先使用方法参数，其次是实例属性）
+        two_proxy = kwargs.pop('two_proxy', None) or self.two_proxy
+        if two_proxy:
+            proxy_url += f"&two_proxy={quote(two_proxy, safe='')}"
+        
+        # 获取 uuid（优先使用方法参数，其次是实例属性）
+        uuid = kwargs.pop('uuid', None) or self.uuid
+        if uuid:
+            proxy_url += f"&uuid={quote(uuid, safe='')}"
         
         request_headers = {}
         for key, value in merged_headers.items():

@@ -101,6 +101,7 @@ export default {
             if (cfspiderPath === 'proxy' || cfspiderPath.startsWith('proxy?')) {
                 const targetUrl = url.searchParams.get('url');
                 const method = url.searchParams.get('method') || 'GET';
+                const twoProxyParam = url.searchParams.get('two_proxy');
                 
                 if (!targetUrl) {
                     return new Response(JSON.stringify({error: 'Missing url parameter'}), {
@@ -119,25 +120,123 @@ export default {
                         }
                     }
                     
-                    // 创建代理请求
-                    const proxyRequest = new Request(targetUrl, {
-                        method: method,
-                        headers: proxyHeaders,
-                        body: method !== 'GET' && method !== 'HEAD' ? request.body : null
-                    });
+                    let response;
                     
-                    const response = await fetch(proxyRequest);
+                    // 使用双层代理还是环境变量中的双层代理
+                    const twoProxy = twoProxyParam || env.TWO_PROXY || env.two_proxy || '';
                     
-                    // 返回响应，添加 CORS 和节点信息
-                    const responseHeaders = new Headers(response.headers);
-                    responseHeaders.set('Access-Control-Allow-Origin', '*');
-                    responseHeaders.set('X-CF-Colo', request.cf?.colo || 'unknown');
-                    responseHeaders.set('X-CFspider-Version', '1.8.6');
-                    
-                    return new Response(response.body, {
-                        status: response.status,
-                        headers: responseHeaders
-                    });
+                    if (twoProxy) {
+                        // 解析双层代理配置
+                        const proxyParts = twoProxy.split(':');
+                        const proxyHost = proxyParts[0];
+                        const proxyPort = parseInt(proxyParts[1]) || 3128;
+                        const proxyUser = proxyParts[2] || '';
+                        const proxyPass = proxyParts[3] || '';
+                        
+                        // 解析目标 URL
+                        const targetParsed = new URL(targetUrl);
+                        const targetHost = targetParsed.hostname;
+                        const targetPort = targetParsed.port || (targetParsed.protocol === 'https:' ? 443 : 80);
+                        const isHttps = targetParsed.protocol === 'https:';
+                        
+                        // 通过 cloudflare:sockets 连接到二层代理
+                        const { connect } = await import('cloudflare:sockets');
+                        
+                        if (isHttps) {
+                            // HTTPS + 双层代理：由于 Workers 的 startTls 限制，建议使用 Python cfspider.get() + VLESS
+                            // 这里返回一个友好的错误提示
+                            return new Response(JSON.stringify({
+                                error: 'HTTPS + two_proxy 不支持通过 /proxy API。请使用 Python cfspider.get() 配合 two_proxy 参数。',
+                                hint: 'cfspider.get(url, cf_proxies=..., uuid=..., two_proxy=...)',
+                                reason: 'Workers /proxy API 仅支持 HTTP 双层代理'
+                            }), {
+                                status: 501,
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Access-Control-Allow-Origin': '*'
+                                }
+                            });
+                        } else {
+                            // HTTP: 需要新的 socket（不使用 starttls）
+                            const socket = connect({
+                                hostname: proxyHost,
+                                port: proxyPort
+                            });
+                            
+                            const writer = socket.writable.getWriter();
+                            const reader = socket.readable.getReader();
+                            
+                            // HTTP: 直接通过代理发送请求
+                            let httpReq = `${method} ${targetUrl} HTTP/1.1\r\nHost: ${targetHost}\r\n`;
+                            if (proxyUser && proxyPass) {
+                                const auth = btoa(`${proxyUser}:${proxyPass}`);
+                                httpReq += `Proxy-Authorization: Basic ${auth}\r\n`;
+                            }
+                            for (const [key, value] of Object.entries(proxyHeaders)) {
+                                httpReq += `${key}: ${value}\r\n`;
+                            }
+                            httpReq += 'Connection: close\r\n\r\n';
+                            
+                            await writer.write(new TextEncoder().encode(httpReq));
+                            
+                            // 读取响应
+                            let responseData = new Uint8Array(0);
+                            while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                const newData = new Uint8Array(responseData.length + value.length);
+                                newData.set(responseData);
+                                newData.set(value, responseData.length);
+                                responseData = newData;
+                            }
+                            
+                            // 解析响应
+                            const responseText = new TextDecoder().decode(responseData);
+                            const headerEnd = responseText.indexOf('\r\n\r\n');
+                            const headers = responseText.substring(0, headerEnd);
+                            const body = responseData.slice(new TextEncoder().encode(responseText.substring(0, headerEnd + 4)).length);
+                            
+                            const statusLine = headers.split('\r\n')[0];
+                            const statusCode = parseInt(statusLine.split(' ')[1]) || 200;
+                            
+                            const responseHeaders = new Headers();
+                            headers.split('\r\n').slice(1).forEach(line => {
+                                const [key, ...valueParts] = line.split(':');
+                                if (key && valueParts.length) {
+                                    responseHeaders.set(key.trim(), valueParts.join(':').trim());
+                                }
+                            });
+                            responseHeaders.set('Access-Control-Allow-Origin', '*');
+                            responseHeaders.set('X-CF-Colo', request.cf?.colo || 'unknown');
+                            responseHeaders.set('X-CFspider-Version', '1.8.6');
+                            responseHeaders.set('X-CFspider-TwoProxy', 'enabled');
+                            
+                            return new Response(body, {
+                                status: statusCode,
+                                headers: responseHeaders
+                            });
+                        }
+                    } else {
+                        // 无双层代理，直接请求
+                        const proxyRequest = new Request(targetUrl, {
+                            method: method,
+                            headers: proxyHeaders,
+                            body: method !== 'GET' && method !== 'HEAD' ? request.body : null
+                        });
+                        
+                        response = await fetch(proxyRequest);
+                        
+                        // 返回响应，添加 CORS 和节点信息
+                        const responseHeaders = new Headers(response.headers);
+                        responseHeaders.set('Access-Control-Allow-Origin', '*');
+                        responseHeaders.set('X-CF-Colo', request.cf?.colo || 'unknown');
+                        responseHeaders.set('X-CFspider-Version', '1.8.6');
+                        
+                        return new Response(response.body, {
+                            status: response.status,
+                            headers: responseHeaders
+                        });
+                    }
                 } catch (error) {
                     return new Response(JSON.stringify({error: error.message}), {
                         status: 500,
