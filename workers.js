@@ -52,10 +52,32 @@ export default {
             if (cfspiderPath === 'api/status') {
                 return new Response(JSON.stringify({
                     status: 'online',
-                    version: '1.8.6',
+                    version: '1.8.7',
                     colo: request.cf?.colo || 'unknown',
                     uptime: Date.now() - (globalThis.START_TIME || Date.now())
                 }), { headers: { 'Content-Type': 'application/json' } });
+            }
+            // 返回当前 ProxyIP 信息
+            if (cfspiderPath === 'api/proxyip') {
+                const colo = request.cf?.colo || 'UNKNOWN';
+                const defaultProxyIp = (colo + '.proxyip.cmliussss.net').toLowerCase();
+                const envProxyIp = env.PROXYIP || '';
+                return new Response(JSON.stringify({
+                    colo: colo,
+                    default: defaultProxyIp,
+                    hk: 'proxyip.cfspider.com',
+                    env: envProxyIp || null,
+                    current: envProxyIp || defaultProxyIp,
+                    options: {
+                        default: { name: '荷兰节点', address: defaultProxyIp },
+                        hk: { name: '香港节点', address: 'proxyip.cfspider.com' }
+                    }
+                }), { 
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    } 
+                });
             }
             // 返回公开配置（供 cfspider 客户端自动获取）
             if (cfspiderPath === 'api/uuid' || cfspiderPath === 'api/config') {
@@ -68,7 +90,7 @@ export default {
                 const configResponse = {
                     host: url.hostname,
                     new_ip: newIpEnabled,
-                    version: '1.8.6',
+                    version: '1.8.7',
                     is_default_uuid: isDefaultUUID,
                     two_proxy_enabled: !!twoProxyConfig
                 };
@@ -2521,7 +2543,19 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             twoProxyDesc: '流量路径: 本地 → Workers (VLESS) → 第二层代理 → 目标网站',
             twoProxyEnvHint: '可选功能：如需指定出口 IP 地区或国内无法直连代理时使用',
             twoProxyHowTo: '如需启用，请在 Cloudflare Dashboard 设置环境变量：',
-            exitIp: '出口 IP'
+            exitIp: '出口 IP',
+            proxyIpTitle: 'ProxyIP 节点选择',
+            proxyIpDesc: '选择出口节点，影响连接速度和稳定性',
+            proxyIpDefault: '默认（荷兰）',
+            proxyIpHK: '香港节点',
+            proxyIpCustom: '自定义',
+            proxyIpTesting: '检测中...',
+            proxyIpOnline: '可用',
+            proxyIpOffline: '不可用',
+            proxyIpSaved: '已保存',
+            proxyIpTest: '检测',
+            proxyIpSave: '保存',
+            proxyIpPlaceholder: '输入 ProxyIP 地址'
         },
         en: {
             subtitle: 'Cloudflare VLESS Proxy Network',
@@ -2550,7 +2584,19 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             twoProxyDesc: 'Traffic: Local → Workers (VLESS) → Second Proxy → Target',
             twoProxyEnvHint: 'Optional: Use when you need specific exit IP region or cannot connect proxy directly',
             twoProxyHowTo: 'To enable, set environment variable in Cloudflare Dashboard:',
-            exitIp: 'Exit IP'
+            exitIp: 'Exit IP',
+            proxyIpTitle: 'ProxyIP Node Selection',
+            proxyIpDesc: 'Select exit node, affects speed and stability',
+            proxyIpDefault: 'Default (Netherlands)',
+            proxyIpHK: 'Hong Kong',
+            proxyIpCustom: 'Custom',
+            proxyIpTesting: 'Testing...',
+            proxyIpOnline: 'Online',
+            proxyIpOffline: 'Offline',
+            proxyIpSaved: 'Saved',
+            proxyIpTest: 'Test',
+            proxyIpSave: 'Save',
+            proxyIpPlaceholder: 'Enter ProxyIP address'
         }
     };
     
@@ -3149,6 +3195,46 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             <div class="stat-card"><div class="stat-label">${t.version}</div><div class="stat-value">${VERSION}</div></div>
         </div>
         
+        <!-- ProxyIP Selection -->
+        <div class="proxyip-section" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; margin-bottom: 32px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 10px;">
+                    <span>${t.proxyIpTitle}</span>
+                </div>
+                <div class="proxyip-status" id="proxyIpStatus" style="font-size: 0.8rem; color: var(--text-secondary);">
+                    当前: <span id="currentProxyIp" style="color: var(--accent-green);">默认</span>
+                </div>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">${t.proxyIpDesc}</div>
+            
+            <div class="proxyip-options" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                <div class="proxyip-option" data-value="default" onclick="selectProxyIp('default')" style="background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s;">
+                    <div style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 4px;">🇳🇱 ${t.proxyIpDefault}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">${colo.toLowerCase()}.proxyip.cmliussss.net</div>
+                    <div class="proxyip-status-badge" data-for="default" style="margin-top: 8px; font-size: 0.7rem;"></div>
+                </div>
+                <div class="proxyip-option" data-value="hk" onclick="selectProxyIp('hk')" style="background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s;">
+                    <div style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 4px;">🇭🇰 ${t.proxyIpHK}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">proxyip.cfspider.com</div>
+                    <div class="proxyip-status-badge" data-for="hk" style="margin-top: 8px; font-size: 0.7rem;"></div>
+                </div>
+                <div class="proxyip-option" data-value="custom" onclick="selectProxyIp('custom')" style="background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s;">
+                    <div style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 4px;">⚙️ ${t.proxyIpCustom}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);" id="customProxyIpDisplay">未配置</div>
+                    <div class="proxyip-status-badge" data-for="custom" style="margin-top: 8px; font-size: 0.7rem;"></div>
+                </div>
+            </div>
+            
+            <div id="customProxyIpInput" style="display: none; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="customProxyIpValue" placeholder="${t.proxyIpPlaceholder}" style="flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 14px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem;">
+                    <button class="action-btn" onclick="testProxyIp()" style="white-space: nowrap;">${t.proxyIpTest}</button>
+                    <button class="action-btn" onclick="saveCustomProxyIp()" style="white-space: nowrap;">${t.proxyIpSave}</button>
+                </div>
+                <div id="proxyIpTestResult" style="margin-top: 12px; font-size: 0.85rem;"></div>
+            </div>
+        </div>
+        
         <!-- Info Grid -->
         <div class="info-grid">
             <div class="info-panel">
@@ -3336,10 +3422,19 @@ response = cfspider.<span class="code-function">get</span>(
         }
         
         // UUID 操作
+        function getVlessLink() {
+            const proxyIpType = localStorage.getItem('cfspider_proxyip_type') || 'default';
+            const proxyIpValue = localStorage.getItem('cfspider_proxyip') || PROXYIP_OPTIONS['default'] || '';
+            let path = '/' + config.uuid;
+            if (proxyIpType !== 'default' && proxyIpValue) {
+                path += '?proxyip=' + encodeURIComponent(proxyIpValue);
+            }
+            return 'vless://' + config.uuid + '@' + HOST + ':443?security=tls&type=ws&host=' + HOST + '&sni=' + HOST + '&path=' + encodeURIComponent(path) + '&encryption=none#CFspider-' + (proxyIpType === 'hk' ? 'HK' : '${colo}');
+        }
+        
         function showUuidModal() {
             document.getElementById('uuidShowInModal').textContent = config.uuid;
-            const vlessLink = 'vless://' + config.uuid + '@' + HOST + ':443?security=tls&type=ws&host=' + HOST + '&sni=' + HOST + '&path=%2F' + config.uuid + '&encryption=none#CFspider';
-            document.getElementById('vlessShowInModal').textContent = vlessLink;
+            document.getElementById('vlessShowInModal').textContent = getVlessLink();
             document.getElementById('uuidModal').classList.add('show');
         }
         
@@ -3349,8 +3444,7 @@ response = cfspider.<span class="code-function">get</span>(
         }
         
         function copyVlessFromModal() {
-            const vlessLink = 'vless://' + config.uuid + '@' + HOST + ':443?security=tls&type=ws&host=' + HOST + '&sni=' + HOST + '&path=%2F' + config.uuid + '&encryption=none#CFspider';
-            navigator.clipboard.writeText(vlessLink);
+            navigator.clipboard.writeText(getVlessLink());
             alert('VLESS 链接已复制到剪贴板');
         }
         
@@ -3394,6 +3488,153 @@ response = cfspider.<span class="code-function">get</span>(
             saveConfig(config);
             updateDisplay();
         }
+        
+        // ProxyIP 选择功能
+        const PROXYIP_OPTIONS = {
+            'default': '${colo.toLowerCase()}.proxyip.cmliussss.net',
+            'hk': 'proxyip.cfspider.com'
+        };
+        
+        function initProxyIp() {
+            const saved = localStorage.getItem('cfspider_proxyip');
+            const savedType = localStorage.getItem('cfspider_proxyip_type') || 'default';
+            
+            // 更新选中状态
+            document.querySelectorAll('.proxyip-option').forEach(el => {
+                el.style.borderColor = 'var(--border-color)';
+            });
+            const selected = document.querySelector('.proxyip-option[data-value="' + savedType + '"]');
+            if (selected) {
+                selected.style.borderColor = 'var(--accent-cyan)';
+            }
+            
+            // 显示当前选择
+            const currentDisplay = document.getElementById('currentProxyIp');
+            if (currentDisplay) {
+                if (savedType === 'default') currentDisplay.textContent = '荷兰（默认）';
+                else if (savedType === 'hk') currentDisplay.textContent = '香港';
+                else if (savedType === 'custom' && saved) currentDisplay.textContent = saved;
+                else currentDisplay.textContent = '默认';
+            }
+            
+            // 自定义显示
+            if (savedType === 'custom' && saved) {
+                document.getElementById('customProxyIpDisplay').textContent = saved;
+                document.getElementById('customProxyIpValue').value = saved;
+            }
+            
+            // 自动检测所有节点
+            testAllProxyIps();
+        }
+        
+        function selectProxyIp(type) {
+            // 更新选中状态
+            document.querySelectorAll('.proxyip-option').forEach(el => {
+                el.style.borderColor = 'var(--border-color)';
+            });
+            const selected = document.querySelector('.proxyip-option[data-value="' + type + '"]');
+            if (selected) {
+                selected.style.borderColor = 'var(--accent-cyan)';
+            }
+            
+            // 显示/隐藏自定义输入框
+            const customInput = document.getElementById('customProxyIpInput');
+            if (type === 'custom') {
+                customInput.style.display = 'block';
+            } else {
+                customInput.style.display = 'none';
+                // 保存选择
+                localStorage.setItem('cfspider_proxyip_type', type);
+                localStorage.setItem('cfspider_proxyip', PROXYIP_OPTIONS[type] || '');
+                
+                const currentDisplay = document.getElementById('currentProxyIp');
+                if (type === 'default') currentDisplay.textContent = '荷兰（默认）';
+                else if (type === 'hk') currentDisplay.textContent = '香港';
+            }
+        }
+        
+        async function testProxyIp(addr) {
+            const address = addr || document.getElementById('customProxyIpValue').value.trim();
+            if (!address) {
+                document.getElementById('proxyIpTestResult').innerHTML = '<span style="color: var(--accent-orange);">请输入地址</span>';
+                return false;
+            }
+            
+            const resultEl = document.getElementById('proxyIpTestResult');
+            resultEl.innerHTML = '<span style="color: var(--text-secondary);">${t.proxyIpTesting}</span>';
+            
+            try {
+                // 尝试解析域名
+                const testUrl = 'https://1.1.1.1/dns-query?name=' + encodeURIComponent(address.split(':')[0]) + '&type=A';
+                const response = await fetch(testUrl, {
+                    headers: { 'Accept': 'application/dns-json' },
+                    signal: AbortSignal.timeout(5000)
+                });
+                const data = await response.json();
+                
+                if (data.Answer && data.Answer.length > 0) {
+                    resultEl.innerHTML = '<span style="color: var(--accent-green);">✓ ${t.proxyIpOnline} - ' + data.Answer[0].data + '</span>';
+                    return true;
+                } else {
+                    resultEl.innerHTML = '<span style="color: var(--accent-orange);">⚠ 未解析到 IP</span>';
+                    return false;
+                }
+            } catch (e) {
+                resultEl.innerHTML = '<span style="color: var(--accent-orange);">⚠ 检测超时</span>';
+                return false;
+            }
+        }
+        
+        async function testAllProxyIps() {
+            for (const [type, addr] of Object.entries(PROXYIP_OPTIONS)) {
+                const badge = document.querySelector('.proxyip-status-badge[data-for="' + type + '"]');
+                if (badge) {
+                    badge.innerHTML = '<span style="color: var(--text-secondary);">检测中...</span>';
+                    try {
+                        const testUrl = 'https://1.1.1.1/dns-query?name=' + encodeURIComponent(addr.split(':')[0]) + '&type=A';
+                        const response = await fetch(testUrl, {
+                            headers: { 'Accept': 'application/dns-json' },
+                            signal: AbortSignal.timeout(5000)
+                        });
+                        const data = await response.json();
+                        if (data.Answer && data.Answer.length > 0) {
+                            badge.innerHTML = '<span style="color: var(--accent-green);">✓ ${t.proxyIpOnline}</span>';
+                        } else {
+                            badge.innerHTML = '<span style="color: var(--accent-orange);">⚠ 未知</span>';
+                        }
+                    } catch (e) {
+                        badge.innerHTML = '<span style="color: var(--text-secondary);">-</span>';
+                    }
+                }
+            }
+        }
+        
+        async function saveCustomProxyIp() {
+            const addr = document.getElementById('customProxyIpValue').value.trim();
+            if (!addr) {
+                document.getElementById('proxyIpTestResult').innerHTML = '<span style="color: var(--accent-orange);">请输入地址</span>';
+                return;
+            }
+            
+            // 先测试
+            const isOnline = await testProxyIp(addr);
+            
+            // 保存
+            localStorage.setItem('cfspider_proxyip_type', 'custom');
+            localStorage.setItem('cfspider_proxyip', addr);
+            document.getElementById('customProxyIpDisplay').textContent = addr;
+            document.getElementById('currentProxyIp').textContent = addr;
+            
+            const resultEl = document.getElementById('proxyIpTestResult');
+            if (isOnline) {
+                resultEl.innerHTML += ' <span style="color: var(--accent-cyan);">- ${t.proxyIpSaved}</span>';
+            } else {
+                resultEl.innerHTML += ' <span style="color: var(--accent-cyan);">- ${t.proxyIpSaved}（可能无法使用）</span>';
+            }
+        }
+        
+        // 页面加载时初始化 ProxyIP
+        document.addEventListener('DOMContentLoaded', initProxyIp);
         
         // 复制功能（环境变量模式）
         function copyVlessLink(el) {
