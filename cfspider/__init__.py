@@ -217,7 +217,7 @@ class PlaywrightNotInstalledError(CFSpiderError):
     pass
 
 
-__version__ = "1.8.5"
+__version__ = "1.8.6"
 __all__ = [
     # 同步 API (requests)
     "get", "post", "put", "delete", "head", "options", "patch", "request",

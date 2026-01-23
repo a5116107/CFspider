@@ -2373,11 +2373,7 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             twoProxyDesc: '流量路径: 本地 → Workers (VLESS) → 第二层代理 → 目标网站',
             twoProxyEnvHint: '可选功能：如需指定出口 IP 地区或国内无法直连代理时使用',
             twoProxyHowTo: '如需启用，请在 Cloudflare Dashboard 设置环境变量：',
-            exitIp: '出口 IP',
-            proxyipTitle: 'ProxyIP 配置',
-            proxyipAdvanced: '高级',
-            proxyipCurrent: '当前 ProxyIP',
-            proxyipHint: 'ProxyIP 用于反代连接。如需自定义，请在 Cloudflare 环境变量中设置 PROXYIP。'
+            exitIp: '出口 IP'
         },
         en: {
             subtitle: 'Cloudflare VLESS Proxy Network',
@@ -2406,11 +2402,7 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             twoProxyDesc: 'Traffic: Local → Workers (VLESS) → Second Proxy → Target',
             twoProxyEnvHint: 'Optional: Use when you need specific exit IP region or cannot connect proxy directly',
             twoProxyHowTo: 'To enable, set environment variable in Cloudflare Dashboard:',
-            exitIp: 'Exit IP',
-            proxyipTitle: 'ProxyIP Configuration',
-            proxyipAdvanced: 'Advanced',
-            proxyipCurrent: 'Current ProxyIP',
-            proxyipHint: 'ProxyIP is used for reverse proxy. To customize, set PROXYIP environment variable in Cloudflare.'
+            exitIp: 'Exit IP'
         }
     };
     
@@ -2997,25 +2989,6 @@ function generateCFspiderPage(request, url, visitorIP, userID, newIpEnabled = tr
             </div>
             `}
             `}
-        </div>
-        
-        <!-- ProxyIP Configuration Section -->
-        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; margin-bottom: 32px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-                <div style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 10px;">
-                    <span>${t.proxyipTitle}</span>
-                    <span class="config-mode-badge page" style="font-size: 0.65rem;">${t.proxyipAdvanced}</span>
-                </div>
-            </div>
-            <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
-                <div class="config-item">
-                    <span class="config-label">${t.proxyipCurrent}</span>
-                    <span class="config-value" style="color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;">${colo.toLowerCase()}.proxyip.cmliussss.net</span>
-                </div>
-                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
-                    ${t.proxyipHint}
-                </div>
-            </div>
         </div>
         
         <!-- Stats Grid -->
