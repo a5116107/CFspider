@@ -1,6 +1,7 @@
 pages/
 node_modules/
 wrangler.toml
+wrangler_*.toml
 .wrangler/
 dist/
 build/
