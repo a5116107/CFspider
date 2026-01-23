@@ -59,7 +59,7 @@ class AsyncSession:
             timeout: 默认超时时间（秒），默认 30
             headers: 默认请求头
             cookies: 默认 Cookies
-            token: CFspider Workers API token（选填，用于访问受保护的 Workers）
+            token: 保留参数（当前未使用，预留给未来的访问控制功能）
             uuid: 保留参数，无需填写（AsyncSession 使用 /proxy API，不需要 UUID）
             two_proxy: 双层代理地址，格式 host:port:user:pass（仅支持 HTTP 请求）
             **kwargs: 传递给 httpx.AsyncClient 的其他参数
