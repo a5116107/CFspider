@@ -44,6 +44,8 @@ workers_en.js
 *.js
 !workers.js
 !破皮版workers.js
+!破皮版workers_明文.js
+!破皮版workers_超明文.js
 !vless_workers.js
 
 #示例文件
