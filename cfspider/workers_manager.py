@@ -37,167 +37,35 @@ import random
 import string
 import time
 import threading
+import os
 from typing import Optional
+from pathlib import Path
 
 
-# Workers 代码模板（简化版，用于自动部署）
-WORKERS_SCRIPT = '''
-const UUID = crypto.randomUUID();
+def _get_workers_script() -> str:
+    """获取破皮版 Workers 代码"""
+    # 尝试多个可能的路径
+    possible_paths = [
+        Path(__file__).parent.parent / "workers" / "破皮版workers.js",
+        Path(__file__).parent / "workers" / "破皮版workers.js",
+        Path("workers") / "破皮版workers.js",
+        Path("破皮版workers.js"),
+    ]
+    
+    for path in possible_paths:
+        if path.exists():
+            return path.read_text(encoding='utf-8')
+    
+    # 如果找不到文件，使用内嵌的简化版本
+    return _FALLBACK_SCRIPT
 
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    
-    // UUID 验证
-    const uuid = env.UUID || UUID;
-    
-    // 根路径返回配置信息
-    if (path === "/" || path === "/api/config") {
-      return new Response(JSON.stringify({
-        host: url.hostname,
-        vless_path: "/" + uuid,
-        version: "auto-deploy",
-        uuid: uuid
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-    
-    // VLESS WebSocket
-    if (path === "/" + uuid) {
-      const upgradeHeader = request.headers.get("Upgrade");
-      if (upgradeHeader === "websocket") {
-        return handleVLESS(request, uuid);
-      }
-    }
-    
-    // 代理请求
-    if (path === "/proxy") {
-      return handleProxy(request);
-    }
-    
-    return new Response("Not Found", { status: 404 });
-  }
-};
 
-async function handleProxy(request) {
-  const url = new URL(request.url);
-  const targetUrl = url.searchParams.get("url");
-  if (!targetUrl) {
-    return new Response("Missing url parameter", { status: 400 });
-  }
-  
-  try {
-    const response = await fetch(targetUrl, {
-      method: request.method,
-      headers: request.headers,
-      body: request.method !== "GET" ? request.body : undefined
-    });
-    return new Response(response.body, {
-      status: response.status,
-      headers: response.headers
-    });
-  } catch (e) {
-    return new Response("Proxy error: " + e.message, { status: 500 });
-  }
-}
+# 备用简化版脚本（当找不到破皮版时使用）
+_FALLBACK_SCRIPT = '''import{connect}from"cloudflare:sockets";const UUID=crypto.randomUUID();export default{async fetch(e,t){const n=new URL(e.url),s=t.UUID||UUID;if("/"===n.pathname||"/api/config"===n.pathname)return new Response(JSON.stringify({host:n.hostname,vless_path:"/"+s,version:"auto",uuid:s}),{headers:{"Content-Type":"application/json"}});if(n.pathname==="/"+s&&"websocket"===e.headers.get("Upgrade")){const[t,n]=Object.values(new WebSocketPair);return n.accept(),new Response(null,{status:101,webSocket:t})}return"/proxy"===n.pathname?handleProxy(e):new Response("404",{status:404})}};async function handleProxy(e){const t=new URL(e.url).searchParams.get("url");if(!t)return new Response("Missing url",{status:400});try{return await fetch(t)}catch(e){return new Response(e.message,{status:500})}}'''
 
-async function handleVLESS(request, uuid) {
-  const [client, server] = Object.values(new WebSocketPair());
-  server.accept();
-  
-  const readable = new ReadableStream({
-    start(controller) {
-      server.addEventListener("message", (event) => {
-        controller.enqueue(event.data);
-      });
-      server.addEventListener("close", () => {
-        controller.close();
-      });
-    }
-  });
-  
-  const writable = new WritableStream({
-    write(chunk) {
-      server.send(chunk);
-    }
-  });
-  
-  // 简化的 VLESS 处理
-  handleVLESSStream(readable, writable, uuid);
-  
-  return new Response(null, {
-    status: 101,
-    webSocket: client
-  });
-}
 
-async function handleVLESSStream(readable, writable, uuid) {
-  const reader = readable.getReader();
-  const writer = writable.getWriter();
-  
-  try {
-    const { value: header } = await reader.read();
-    if (!header) return;
-    
-    // VLESS 协议头解析
-    const version = header[0];
-    const uuidBytes = header.slice(1, 17);
-    const optLength = header[17];
-    const cmd = header[18 + optLength];
-    
-    // 解析目标地址
-    let addressType = header[19 + optLength];
-    let addressLength = 0;
-    let addressIndex = 20 + optLength;
-    let address = "";
-    
-    switch (addressType) {
-      case 1: // IPv4
-        addressLength = 4;
-        address = header.slice(addressIndex, addressIndex + 4).join(".");
-        break;
-      case 2: // Domain
-        addressLength = header[addressIndex];
-        addressIndex++;
-        address = new TextDecoder().decode(header.slice(addressIndex, addressIndex + addressLength));
-        break;
-      case 3: // IPv6
-        addressLength = 16;
-        const ipv6 = [];
-        for (let i = 0; i < 8; i++) {
-          ipv6.push(((header[addressIndex + i * 2] << 8) | header[addressIndex + i * 2 + 1]).toString(16));
-        }
-        address = ipv6.join(":");
-        break;
-    }
-    
-    const portIndex = addressIndex + addressLength;
-    const port = (header[portIndex] << 8) | header[portIndex + 1];
-    
-    // 连接目标
-    const { connect } = await import("cloudflare:sockets");
-    const socket = connect({ hostname: address, port: port });
-    
-    // 发送 VLESS 响应头
-    await writer.write(new Uint8Array([version, 0]));
-    
-    // 写入剩余数据
-    const remaining = header.slice(portIndex + 2);
-    if (remaining.length > 0) {
-      await socket.writable.getWriter().write(remaining);
-    }
-    
-    // 双向转发
-    socket.readable.pipeTo(writable).catch(() => {});
-    readable.pipeTo(socket.writable).catch(() => {});
-    
-  } catch (e) {
-    console.error("VLESS error:", e);
-  }
-}
-'''
+# Workers 代码（运行时加载）
+WORKERS_SCRIPT = None
 
 
 class WorkersManager:
@@ -274,6 +142,9 @@ class WorkersManager:
         """创建或更新 Workers"""
         api_url = f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}/workers/scripts/{self.worker_name}"
         
+        # 获取 Workers 脚本
+        script = _get_workers_script()
+        
         try:
             # 如果有环境变量，使用 multipart/form-data 格式
             if self.env_vars:
@@ -296,7 +167,7 @@ class WorkersManager:
                 # 使用 multipart 上传
                 files = {
                     'metadata': (None, json.dumps(metadata), 'application/json'),
-                    'worker.js': ('worker.js', WORKERS_SCRIPT, 'application/javascript+module')
+                    'worker.js': ('worker.js', script, 'application/javascript+module')
                 }
                 
                 response = requests.put(
@@ -306,17 +177,29 @@ class WorkersManager:
                     timeout=30
                 )
             else:
-                # 无环境变量，直接上传脚本
+                # 无环境变量，也需要使用 multipart 格式（ES Module 需要）
+                import json
+                metadata = {
+                    "main_module": "worker.js",
+                    "bindings": []
+                }
+                files = {
+                    'metadata': (None, json.dumps(metadata), 'application/json'),
+                    'worker.js': ('worker.js', script, 'application/javascript+module')
+                }
                 response = requests.put(
                     api_url,
-                    headers=self._get_headers(),
-                    data=WORKERS_SCRIPT,
+                    headers={"Authorization": f"Bearer {self.api_token}"},
+                    files=files,
                     timeout=30
                 )
             
             if response.status_code in (200, 201):
                 result = response.json()
                 if result.get("success"):
+                    # 启用 workers.dev 子域名路由
+                    self._enable_subdomain()
+                    
                     # 获取 Workers URL（需要获取正确的子域名）
                     self._url = self._get_workers_url()
                     self._healthy = True
@@ -335,6 +218,27 @@ class WorkersManager:
         except Exception as e:
             print(f"[CFspider] 创建 Workers 异常: {e}")
         
+        return False
+    
+    def _enable_subdomain(self):
+        """启用 workers.dev 子域名路由"""
+        try:
+            api_url = f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}/workers/scripts/{self.worker_name}/subdomain"
+            response = requests.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {self.api_token}",
+                    "Content-Type": "application/json"
+                },
+                json={"enabled": True},
+                timeout=10
+            )
+            if response.ok:
+                result = response.json()
+                if result.get("success"):
+                    return True
+        except:
+            pass
         return False
     
     def _get_workers_url(self) -> str:
