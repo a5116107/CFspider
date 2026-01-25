@@ -464,7 +464,11 @@ def make_workers(
     # 常用环境变量快捷参数
     uuid: Optional[str] = None,
     proxyip: Optional[str] = None,
-    socks5: Optional[str] = None
+    socks5: Optional[str] = None,
+    host: Optional[str] = None,
+    key: Optional[str] = None,
+    accesskey: Optional[str] = None,
+    two_proxy: Optional[str] = None
 ) -> WorkersManager:
     """
     创建 Cloudflare Workers 并返回管理器
@@ -485,9 +489,13 @@ def make_workers(
             示例: {"UUID": "xxx", "PROXYIP": "1.2.3.4", "CUSTOM_VAR": "value"}
         
         # 常用环境变量快捷参数（会合并到 env_vars）
-        uuid: VLESS UUID（等同于 env_vars={"UUID": "xxx"}）
-        proxyip: 代理 IP（等同于 env_vars={"PROXYIP": "xxx"}）
-        socks5: SOCKS5 代理地址（等同于 env_vars={"SOCKS5": "xxx"}）
+        uuid: VLESS UUID
+        proxyip: 优选 IP / 代理 IP（支持多个，逗号分隔）
+        socks5: SOCKS5 代理地址
+        host: 自定义主机名（用于 CDN 回源）
+        key: 加密密钥
+        accesskey: 访问密钥（破皮版用）
+        two_proxy: 双层代理地址（格式: host:port:user:pass）
     
     Returns:
         WorkersManager: Workers 管理器，可直接用于 cf_proxies
@@ -550,6 +558,14 @@ def make_workers(
         final_env_vars['PROXYIP'] = proxyip
     if socks5:
         final_env_vars['SOCKS5'] = socks5
+    if host:
+        final_env_vars['HOST'] = host
+    if key:
+        final_env_vars['KEY'] = key
+    if accesskey:
+        final_env_vars['ACCESSKEY'] = accesskey
+    if two_proxy:
+        final_env_vars['TWO_PROXY'] = two_proxy
     
     return WorkersManager(
         api_token=api_token,

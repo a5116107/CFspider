@@ -951,11 +951,15 @@ workers.stop()
 2. 右侧边栏可以看到 Account ID
 
 **支持的环境变量：**
-| 变量名 | 说明 |
-|--------|------|
-| `UUID` | VLESS UUID（固定 IP 时使用） |
-| `PROXYIP` | 优选 IP / 代理 IP |
-| `SOCKS5` | SOCKS5 代理（格式: user:pass@host:port） |
+| 变量名 | 快捷参数 | 说明 |
+|--------|----------|------|
+| `UUID` | `uuid` | VLESS UUID（固定 IP 时使用） |
+| `PROXYIP` | `proxyip` | 优选 IP / 代理 IP（支持多个，逗号分隔） |
+| `SOCKS5` | `socks5` | SOCKS5 代理（格式: user:pass@host:port） |
+| `HOST` | `host` | 自定义主机名（用于 CDN 回源时指定正确域名） |
+| `KEY` | `key` | 加密密钥 |
+| `ACCESSKEY` | `accesskey` | 访问密钥（破皮版 /x2727admin 用） |
+| `TWO_PROXY` | `two_proxy` | 双层代理（格式: host:port:user:pass） |
 
 ### 浏览器模式
 
