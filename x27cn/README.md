@@ -2,6 +2,15 @@
 
 X27CN 代码混淆加密库 - Code obfuscation and encryption library
 
+## 在线工具
+
+访问 [https://x27cn.cfspider.com](https://x27cn.cfspider.com) 可直接在浏览器中使用：
+- 加密/解密数据
+- 代码混淆（变量名、字符串、数字）
+- 密码加密
+
+**防爬保护：** 在线工具集成滑块人机验证 + 行为检测，有效阻止自动化爬虫抓取页面内容。
+
 ## 安装
 
 ```bash
