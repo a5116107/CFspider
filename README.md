@@ -1053,9 +1053,30 @@ workers.stop()
 | `PROXYIP` | `proxyip` | 优选 IP / 代理 IP（支持多个，逗号分隔） |
 | `SOCKS5` | `socks5` | SOCKS5 代理（格式: user:pass@host:port） |
 | `HOST` | `host` | 自定义主机名（用于 CDN 回源时指定正确域名） |
-| `KEY` | `key` | 加密密钥 |
-| `ACCESSKEY` | `accesskey` | 访问密钥（破皮版 /x2727admin 用） |
+| `KEY` | `key` | X27CN 加密密钥（标准版使用，破皮版忽略此参数） |
+| `ACCESSKEY` | `accesskey` | 自定义访问密钥（破皮版 /x2727admin 用，不设置则自动生成） |
 | `TWO_PROXY` | `two_proxy` | 双层代理（格式: host:port:user:pass） |
+
+**破皮版密钥机制说明：**
+
+破皮版使用**双重动态密钥**机制，与标准版不同：
+
+| 步骤 | 密钥 | 用途 |
+|------|------|------|
+| 1. 访问 `/x2727admin` | 默认密钥 `x27cn2026` | 解密获取访问密钥（如 `yyVybUsh`） |
+| 2. 访问 `/x2727admin/{访问密钥}` | **访问密钥本身** | 解密获取完整配置和 VLESS 链接 |
+
+```python
+# 破皮版使用示例
+workers = cfspider.make_workers(
+    api_token="your-token",
+    account_id="your-account-id",
+    accesskey="mykey123"  # 可选：自定义访问密钥，不设置则自动生成8位随机密钥
+)
+
+# 注意：破皮版的 key 参数不影响加密，加密密钥始终是访问密钥
+# 如需自定义加密密钥，请使用 accesskey 参数
+```
 
 **自定义域名：**
 | 参数 | 说明 |
