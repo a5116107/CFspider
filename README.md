@@ -52,7 +52,7 @@ npm run electron:dev
 
 **支持自定义模型名称**，不限于预设列表。
 
-详细文档：[cfspider-browser/README.md](cfspider-browser/README.md) | [API 文档](https://docs.cfspider.com/smart-browser.html)
+详细文档：[cfspider-browser/README.md](cfspider-browser/README.md) | [API 文档](api-docs/README.md)
 
 ---
 
