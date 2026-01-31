@@ -1,6 +1,6 @@
 {
   "name": "cfspider-browser",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "CFspider 智能浏览器 - AI驱动的可视化爬虫，自然语言控制浏览器自动化",
   "keywords": [
     "browser",
@@ -65,6 +65,7 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.0",
+    "use-sync-external-store": "^1.2.0",
     "xlsx": "^0.18.5",
     "zustand": "^4.4.7"
   },
