@@ -369,3 +369,94 @@ export async function deleteSkill(skillId: string): Promise<boolean> {
   
   return true
 }
+
+// ========== 操作日志（用于自动技能提取） ==========
+
+interface OperationLog {
+  action: string
+  selector?: string
+  value?: string
+  domain: string
+  success: boolean
+  timestamp: number
+}
+
+// 最近的操作日志
+let operationLogs: OperationLog[] = []
+const MAX_OPERATION_LOGS = 50
+
+/**
+ * 记录操作日志
+ */
+export function logOperation(
+  action: string,
+  selector?: string,
+  value?: string,
+  domain?: string,
+  success: boolean = true
+): void {
+  const log: OperationLog = {
+    action,
+    selector,
+    value,
+    domain: domain || '',
+    success,
+    timestamp: Date.now()
+  }
+  
+  operationLogs.push(log)
+  
+  // 只保留最近的操作
+  if (operationLogs.length > MAX_OPERATION_LOGS) {
+    operationLogs = operationLogs.slice(-MAX_OPERATION_LOGS)
+  }
+}
+
+/**
+ * 自动提取技能（从操作日志中学习）
+ */
+export async function autoExtractSkill(): Promise<{ skill: Skill, reason: string } | null> {
+  // 至少需要 5 个成功的操作
+  const recentSuccessfulOps = operationLogs.filter(l => l.success).slice(-10)
+  if (recentSuccessfulOps.length < 5) return null
+  
+  // 检查是否有重复的操作模式
+  const domains = [...new Set(recentSuccessfulOps.map(l => l.domain).filter(d => d))]
+  if (domains.length !== 1) return null // 需要在同一个域名上
+  
+  const domain = domains[0]
+  
+  // 检查是否已经有这个域名的技能
+  await loadSkills()
+  const existingSkill = skillsCache.find(s => s.domains.includes(domain))
+  if (existingSkill) return null
+  
+  // 提取操作步骤
+  const steps: SkillStep[] = recentSuccessfulOps.map(op => {
+    const step: SkillStep = {
+      action: op.action.includes('click') ? 'click' : 
+              op.action.includes('input') || op.action.includes('type') ? 'input' : 
+              op.action.includes('scroll') ? 'scroll' : 
+              op.action.includes('navigate') ? 'navigate' : 'click',
+      target: op.selector,
+      value: op.value
+    }
+    return step
+  }).filter(s => s.target || s.value)
+  
+  if (steps.length < 3) return null
+  
+  // 创建新技能
+  const skill = await createSkill(
+    domain + ' 操作',
+    '自动从操作中学习的技能',
+    [domain.replace(/\.(com|cn|org|net)$/, '')],
+    [domain],
+    steps.slice(0, 10) // 最多 10 步
+  )
+  
+  // 清空相关日志
+  operationLogs = operationLogs.filter(l => l.domain !== domain)
+  
+  return { skill, reason: '从连续操作中自动学习' }
+}
