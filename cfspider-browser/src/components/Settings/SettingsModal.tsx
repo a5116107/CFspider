@@ -28,7 +28,8 @@ const AI_PRESETS = [
   { id: 'moonshot', name: 'Moonshot', endpoint: 'https://api.moonshot.cn/v1/chat/completions', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'], description: 'Kimi 大模型' },
   { id: 'zhipu', name: '智谱 AI', endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', models: ['glm-4-plus', 'glm-4', 'glm-4-flash'], description: 'ChatGLM 系列' },
   { id: 'qwen', name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'], description: '阿里云大模型' },
-  { id: 'siliconflow', name: 'SiliconFlow', endpoint: 'https://api.siliconflow.cn/v1/chat/completions', models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct', 'meta-llama/Llama-3.3-70B-Instruct'], description: '国产模型聚合平台' }
+  { id: 'siliconflow', name: 'SiliconFlow', endpoint: 'https://api.siliconflow.cn/v1/chat/completions', models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct', 'meta-llama/Llama-3.3-70B-Instruct'], description: '国产模型聚合平台' },
+  { id: 'opencode', name: 'OpenCode Zen', endpoint: 'https://opencode.ai/zen/v1/chat/completions', models: ['glm-4.7-free', 'gpt-5-nano', 'kimi-k2.5-free', 'trinity-large-preview-free', 'big-pickle', 'claude-opus-4-5', 'claude-sonnet-4-5', 'gpt-5.2', 'gpt-5', 'gemini-3-pro', 'qwen3-coder', 'kimi-k2.5'], description: '多模型聚合，含免费模型' }
 ]
 
 interface SettingsModalProps {

@@ -1,6 +1,6 @@
 {
   "name": "cfspider-browser",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "CFspider 智能浏览器 - AI驱动的浏览器，自然语言控制浏览器自动化",
   "keywords": [
     "browser",
@@ -64,7 +64,7 @@
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^10.1.0",
+    "react-markdown": "9.0.1",
     "react-syntax-highlighter": "^16.1.0",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.0"

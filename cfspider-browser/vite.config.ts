@@ -7,13 +7,11 @@ export default defineConfig({
   base: './',
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      'use-sync-external-store/shim/with-selector': resolve(__dirname, 'src/shims/use-sync-external-store.ts')
+      '@': resolve(__dirname, 'src')
     }
   },
   optimizeDeps: {
-    include: ['zustand', 'react'],
-    exclude: ['use-sync-external-store']
+    include: ['zustand', 'react', 'style-to-js', 'html-react-parser']
   },
   build: {
     outDir: 'dist',
