@@ -39,10 +39,20 @@ function ensureDependencies() {
     const npmCmd = isWindows ? 'npm.cmd' : 'npm';
     
     try {
-      execSync(npmCmd + ' install', {
-        cwd: packageRoot,
-        stdio: 'inherit'
-      });
+      // 优先使用 npm ci（使用 package-lock.json 保证版本一致）
+      // 如果 npm ci 失败则回退到 npm install
+      try {
+        execSync(npmCmd + ' ci', {
+          cwd: packageRoot,
+          stdio: 'inherit'
+        });
+      } catch (ciErr) {
+        console.log('\nnpm ci 失败，尝试 npm install...\n');
+        execSync(npmCmd + ' install', {
+          cwd: packageRoot,
+          stdio: 'inherit'
+        });
+      }
       console.log('\n✅ 依赖安装完成！\n');
     } catch (err) {
       console.error('\n❌ 依赖安装失败，请手动运行: npm install');
