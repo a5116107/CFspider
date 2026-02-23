@@ -1,4 +1,4 @@
-export { default } from "./破皮版workers.js";
+export { default } from "./爬楼梯workers.js";
 
 // Compatibility shim: the existing `proxytt` Worker previously had a Durable Objects
 // binding that required an exported class named `AuthStore`. Keeping this export
@@ -15,4 +15,3 @@ export class AuthStore {
     });
   }
 }
-
