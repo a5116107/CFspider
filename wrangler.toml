@@ -1,0 +1,8 @@
+name = "proxytt"
+main = "workers/proxytt.entry.js"
+compatibility_date = "2026-02-23"
+account_id = "84a8fceb1aac6b1b1a4a141d7c791f78"
+
+# Routes are managed in the Cloudflare dashboard (if any).
+workers_dev = true
+
