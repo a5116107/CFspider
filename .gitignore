@@ -53,6 +53,7 @@ workers_en.js
 !爬楼梯workers.js
 !workers/vless.entry.js
 !workers/proxytt.entry.js
+!workers/peel_workers.js
 
 # 示例文件
 examples/

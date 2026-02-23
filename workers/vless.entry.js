@@ -1,4 +1,4 @@
-import peelWorker from "./破皮版workers_明文.js";
+import peelWorker from "./peel_workers.js";
 
 function getDebugKey(env) {
   return env.ACCESSKEY || env.ACCESS_KEY || env.AKEY || "";
