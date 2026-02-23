@@ -77,7 +77,7 @@ jobs:
           WORKERS_SUBDOMAIN: ${{ steps.workers_subdomain.outputs.subdomain }}
         run: |
           set -euo pipefail
-          url="https://vless.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
+          url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
           tmp_headers="$(mktemp)"
           tmp_body="$(mktemp)"
 
