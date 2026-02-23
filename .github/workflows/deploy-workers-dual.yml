@@ -11,7 +11,7 @@ jobs:
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '7f416be9fa20a235cafa1a13ab01b80d' }}
           command: deploy --keep-vars --config wrangler.toml
 
   deploy-vless:
@@ -21,5 +21,5 @@ jobs:
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '7f416be9fa20a235cafa1a13ab01b80d' }}
           command: deploy --keep-vars --config wrangler.vless.toml

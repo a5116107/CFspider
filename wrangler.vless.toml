@@ -1,5 +1,5 @@
 name = "vless"
 main = "workers/vless.entry.js"
 compatibility_date = "2026-02-23"
-account_id = "84a8fceb1aac6b1b1a4a141d7c791f78"
+account_id = "7f416be9fa20a235cafa1a13ab01b80d"
 workers_dev = true
