@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "workers/**"
+      - "workers/vless.entry.js"
+      - "workers/破皮版workers.js"
       - "wrangler.vless.toml"
       - ".github/workflows/deploy-worker-vless.yml"
   workflow_dispatch:
@@ -53,44 +54,72 @@ jobs:
         run: |
           set -euo pipefail
           ping_url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
-          tmp_headers="$(mktemp)"
-          tmp_body="$(mktemp)"
+          ping_ok=0
+          ping_headers=""
+          ping_body=""
+          ping_code=""
+          ping_exit=""
 
-          set +e
-          code="$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w "%{http_code}" --max-time 20 "$ping_url")"
-          curl_exit=$?
-          set -e
+          for attempt in $(seq 1 8); do
+            ping_headers="$(mktemp)"
+            ping_body="$(mktemp)"
 
-          echo "GET $ping_url -> $code (curl_exit=$curl_exit)"
-          echo "--- response headers ---"
-          cat "$tmp_headers"
-          echo "--- response body (first 2000 bytes) ---"
-          head -c 2000 "$tmp_body" || true
-          echo
+            set +e
+            ping_code="$(curl -sS -D "$ping_headers" -o "$ping_body" -w "%{http_code}" --max-time 20 "$ping_url")"
+            ping_exit=$?
+            set -e
 
-          if [ "$curl_exit" != "0" ] || [ "$code" != "200" ]; then
+            ping_text="$(cat "$ping_body" 2>/dev/null || true)"
+            if [ "$ping_exit" = "0" ] && [ "$ping_code" = "200" ] && [ "$ping_text" = "pong" ]; then
+              ping_ok=1
+              break
+            fi
+
+            echo "Ping attempt $attempt failed: code=$ping_code exit=$ping_exit body=$(echo \"$ping_text\" | head -c 120)"
+            sleep 3
+          done
+
+          if [ "$ping_ok" != "1" ]; then
+            echo "GET $ping_url -> $ping_code (curl_exit=$ping_exit)"
+            echo "--- response headers ---"
+            cat "$ping_headers" || true
+            echo "--- response body (first 2000 bytes) ---"
+            head -c 2000 "$ping_body" || true
+            echo
             exit 1
           fi
-
-          body="$(cat "$tmp_body")"
-          test "$body" = "pong"
 
           root_url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/"
-          root_headers="$(mktemp)"
-          root_body="$(mktemp)"
+          root_ok=0
+          root_headers=""
+          root_body=""
+          root_code=""
+          root_exit=""
 
-          set +e
-          root_code="$(curl -sS -D "$root_headers" -o "$root_body" -w "%{http_code}" --max-time 20 "$root_url")"
-          root_exit=$?
-          set -e
+          for attempt in $(seq 1 8); do
+            root_headers="$(mktemp)"
+            root_body="$(mktemp)"
 
-          echo "GET $root_url -> $root_code (curl_exit=$root_exit)"
-          echo "--- response body (first 2000 bytes) ---"
-          head -c 2000 "$root_body" || true
-          echo
+            set +e
+            root_code="$(curl -sS -D "$root_headers" -o "$root_body" -w "%{http_code}" --max-time 20 "$root_url")"
+            root_exit=$?
+            set -e
 
-          if [ "$root_exit" != "0" ] || [ "$root_code" != "200" ]; then
+            if [ "$root_exit" = "0" ] && [ "$root_code" = "200" ] && grep -q "Welcome to nginx!" "$root_body"; then
+              root_ok=1
+              break
+            fi
+
+            echo "Root attempt $attempt failed: code=$root_code exit=$root_exit"
+            sleep 3
+          done
+
+          if [ "$root_ok" != "1" ]; then
+            echo "GET $root_url -> $root_code (curl_exit=$root_exit)"
+            echo "--- response headers ---"
+            cat "$root_headers" || true
+            echo "--- response body (first 2000 bytes) ---"
+            head -c 2000 "$root_body" || true
+            echo
             exit 1
           fi
-
-          grep -q "Welcome to nginx!" "$root_body"

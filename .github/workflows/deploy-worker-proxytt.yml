@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "workers/**"
+      - "workers/proxytt.entry.js"
+      - "workers/爬楼梯workers.js"
       - "wrangler.toml"
       - ".github/workflows/deploy-worker-proxytt.yml"
   workflow_dispatch:
