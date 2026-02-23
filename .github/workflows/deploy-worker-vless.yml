@@ -53,6 +53,24 @@ jobs:
         run: |
           set -euo pipefail
           url="https://vless.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
-          body="$(curl -fsS "$url")"
-          echo "GET $url -> $body"
+          tmp_headers="$(mktemp)"
+          tmp_body="$(mktemp)"
+
+          set +e
+          code="$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w "%{http_code}" --max-time 20 "$url")"
+          curl_exit=$?
+          set -e
+
+          echo "GET $url -> $code (curl_exit=$curl_exit)"
+          echo "--- response headers ---"
+          cat "$tmp_headers"
+          echo "--- response body (first 2000 bytes) ---"
+          head -c 2000 "$tmp_body" || true
+          echo
+
+          if [ "$curl_exit" != "0" ] || [ "$code" != "200" ]; then
+            exit 1
+          fi
+
+          body="$(cat "$tmp_body")"
           test "$body" = "pong"
