@@ -1,35 +1,18 @@
-function getDebugKey(env) {
-  return env.ACCESSKEY || env.ACCESS_KEY || env.AKEY || "";
-}
+import { connect } from "cloudflare:sockets";
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request) {
     const url = new URL(request.url);
 
-    // Simple smoke test endpoint for CI/CD verification.
     if (url.pathname === "/__ping") {
       return new Response("pong", { status: 200 });
     }
 
-    const expected = getDebugKey(env);
-    const provided = request.headers.get("x-cfspider-debug") || "";
-    const canDebug = Boolean(expected) && provided === expected;
-
-    try {
-      const mod = await import("./破皮版workers.js");
-      const worker = mod?.default;
-      if (!worker || typeof worker.fetch !== "function") {
-        throw new Error("Invalid VLESS worker module: missing default.fetch().");
-      }
-      return await worker.fetch(request, env, ctx);
-    } catch (err) {
-      const details =
-        err && typeof err === "object" ? err.stack || err.message || String(err) : String(err);
-
-      return new Response(
-        canDebug ? details : "Worker threw exception. Check Cloudflare logs.",
-        { status: 500 },
-      );
+    // Keep the `connect` symbol referenced so bundlers don't drop the import.
+    if (typeof connect !== "function") {
+      return new Response("cloudflare:sockets not available", { status: 500 });
     }
+
+    return new Response("cloudflare:sockets import ok", { status: 200 });
   },
 };
