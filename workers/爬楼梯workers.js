@@ -23,8 +23,19 @@ export default {
     // 令牌验证
     const token = env.TOKEN || '';
     if (token) {
-      const auth = request.headers.get('Authorization') || url.searchParams.get('token') || '';
-      if (auth !== `Bearer ${token}` && auth !== token) {
+      if (path === '/login') {
+        return handleLogin(request, token);
+      }
+
+      if (path === '/logout') {
+        return handleLogout();
+      }
+
+      if (!isAuthorized(request, url, token)) {
+        if (path === '/' && request.method === 'GET') {
+          return redirect('/login');
+        }
+
         return json({ error: 'Unauthorized' }, 401);
       }
     }
@@ -477,6 +488,180 @@ function corsResponse() {
       'Access-Control-Max-Age': '86400',
     },
   });
+}
+
+function redirect(location) {
+  return new Response('Redirecting...', {
+    status: 302,
+    headers: {
+      Location: location,
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+function normalizeToken(value) {
+  return String(value || '').trim();
+}
+
+function getCookieValue(cookieHeader, name) {
+  if (!cookieHeader) return '';
+
+  const parts = cookieHeader.split(';');
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+
+    const key = trimmed.slice(0, eq).trim();
+    if (key !== name) continue;
+
+    const raw = trimmed.slice(eq + 1);
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  return '';
+}
+
+function isAuthorized(request, url, token) {
+  const expected = normalizeToken(token);
+  if (!expected) return true;
+
+  const authHeader = normalizeToken(request.headers.get('Authorization'));
+  const authBearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+  const authQuery = normalizeToken(url.searchParams.get('token'));
+  const authCookie = normalizeToken(getCookieValue(request.headers.get('Cookie'), 'cfspider_token'));
+
+  const provided = normalizeToken(authBearer || authHeader || authQuery || authCookie);
+  return provided === expected;
+}
+
+function loginPage(errorMessage = '') {
+  const errorHtml = errorMessage
+    ? `<div class="err">${escapeHtml(errorMessage)}</div>`
+    : '';
+
+  return new Response(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login - Proxy Service</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .c { background: #fff; padding: 40px; border-radius: 12px; width: min(520px, 92vw); box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+    h1 { font-size: 22px; color: #111827; margin-bottom: 10px; }
+    p { color: #6b7280; line-height: 1.6; margin-bottom: 18px; }
+    label { display: block; color: #374151; font-size: 14px; margin-bottom: 8px; }
+    input { width: 100%; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 16px; outline: none; }
+    input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .row { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+    button { border: 0; padding: 12px 14px; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    a { color: #2563eb; text-decoration: none; }
+    .hint { font-size: 13px; color: #6b7280; margin-top: 14px; }
+    .err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 10px; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <div class="c">
+    <h1>Login</h1>
+    <p>This proxy requires a token. Enter the token to continue.</p>
+    ${errorHtml}
+    <form method="POST" action="/login">
+      <label for="token">Token</label>
+      <input id="token" name="token" type="password" placeholder="Enter token" autocomplete="current-password" required />
+      <div class="row">
+        <button type="submit">Sign in</button>
+        <a href="/">Back</a>
+      </div>
+    </form>
+    <div class="hint">Tip: API clients can also use <code>Authorization: Bearer &lt;token&gt;</code> or <code>?token=&lt;token&gt;</code>.</div>
+  </div>
+</body>
+</html>`, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+async function handleLogin(request, token) {
+  if (!token) {
+    return loginPage('TOKEN is not configured for this Worker.');
+  }
+
+  const url = new URL(request.url);
+  if (request.method === 'GET') {
+    if (isAuthorized(request, url, token)) {
+      return redirect('/');
+    }
+    return loginPage();
+  }
+
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
+  }
+
+  let provided = '';
+  const contentType = request.headers.get('Content-Type') || '';
+  try {
+    if (contentType.includes('application/json')) {
+      const body = await request.json();
+      provided = normalizeToken(body?.token || body?.TOKEN || '');
+    } else {
+      const form = await request.formData();
+      provided = normalizeToken(form.get('token') || form.get('TOKEN') || '');
+    }
+  } catch {
+    provided = '';
+  }
+
+  if (!provided || provided !== normalizeToken(token)) {
+    return loginPage('Invalid token.');
+  }
+
+  const headers = new Headers({
+    Location: '/',
+    'Cache-Control': 'no-store',
+  });
+  headers.append(
+    'Set-Cookie',
+    `cfspider_token=${encodeURIComponent(provided)}; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`,
+  );
+
+  return new Response('Redirecting...', { status: 302, headers });
+}
+
+function handleLogout() {
+  const headers = new Headers({
+    Location: '/login',
+    'Cache-Control': 'no-store',
+  });
+  headers.append(
+    'Set-Cookie',
+    'cfspider_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax',
+  );
+
+  return new Response('Redirecting...', { status: 302, headers });
 }
 
 function homePage() {
