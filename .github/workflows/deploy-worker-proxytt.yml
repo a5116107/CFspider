@@ -28,3 +28,33 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '7f416be9fa20a235cafa1a13ab01b80d' }}
           command: deploy --keep-vars --config wrangler.toml
+
+      - name: Resolve workers.dev subdomain
+        id: workers_subdomain
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '7f416be9fa20a235cafa1a13ab01b80d' }}
+        run: |
+          set -euo pipefail
+          resp="$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain")"
+          subdomain="$(echo "$resp" | jq -r '.result.subdomain // empty')"
+          if [ -z "$subdomain" ]; then
+            echo "Failed to resolve workers.dev subdomain:" >&2
+            echo "$resp" | jq . >&2
+            exit 1
+          fi
+          echo "subdomain=$subdomain" >> "$GITHUB_OUTPUT"
+          echo "workers.dev subdomain: $subdomain"
+
+      - name: Smoke test (proxytt)
+        env:
+          WORKERS_SUBDOMAIN: ${{ steps.workers_subdomain.outputs.subdomain }}
+        run: |
+          set -euo pipefail
+          url="https://proxytt.${WORKERS_SUBDOMAIN}.workers.dev/health"
+          code="$(curl -sS -o /dev/null -w "%{http_code}" "$url")"
+          echo "GET $url -> $code"
+          if [ "$code" != "200" ] && [ "$code" != "401" ]; then
+            exit 1
+          fi
