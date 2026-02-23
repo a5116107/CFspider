@@ -27,5 +27,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
-          config: wrangler.vless.toml
-          command: deploy --keep-vars
+          command: deploy --keep-vars --config wrangler.vless.toml
