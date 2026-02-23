@@ -27,5 +27,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
-          command: deploy
-
+          command: deploy --keep-vars
