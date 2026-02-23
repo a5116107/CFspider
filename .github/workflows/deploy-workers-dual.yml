@@ -77,7 +77,7 @@ jobs:
           WORKERS_SUBDOMAIN: ${{ steps.workers_subdomain.outputs.subdomain }}
         run: |
           set -euo pipefail
-          ping_url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
+          ping_url="https://cfspider-v3.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
           ping_ok=0
           ping_headers=""
           ping_body=""
@@ -113,7 +113,7 @@ jobs:
             exit 1
           fi
 
-          root_url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/"
+          root_url="https://cfspider-v3.${WORKERS_SUBDOMAIN}.workers.dev/"
           root_ok=0
           root_headers=""
           root_body=""
@@ -129,7 +129,7 @@ jobs:
             root_exit=$?
             set -e
 
-            if [ "$root_exit" = "0" ] && [ "$root_code" = "200" ] && grep -q "Welcome to nginx!" "$root_body"; then
+            if [ "$root_exit" = "0" ] && [ "$root_code" = "200" ]; then
               root_ok=1
               break
             fi

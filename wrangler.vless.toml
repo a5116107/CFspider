@@ -1,4 +1,4 @@
-name = "cfspider-v2"
+name = "cfspider-v3"
 main = "workers/vless.entry.js"
 compatibility_date = "2026-02-23"
 account_id = "7f416be9fa20a235cafa1a13ab01b80d"
