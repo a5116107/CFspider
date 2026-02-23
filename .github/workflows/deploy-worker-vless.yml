@@ -1,16 +1,16 @@
-name: Deploy Worker (proxytt)
+name: Deploy Worker (vless)
 
 on:
   push:
     branches: [main]
     paths:
       - "workers/**"
-      - "wrangler.toml"
-      - ".github/workflows/deploy-worker-proxytt.yml"
+      - "wrangler.vless.toml"
+      - ".github/workflows/deploy-worker-vless.yml"
   workflow_dispatch:
 
 concurrency:
-  group: deploy-worker-proxytt
+  group: deploy-worker-vless
   cancel-in-progress: true
 
 jobs:
@@ -27,5 +27,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
-          config: wrangler.toml
+          config: wrangler.vless.toml
           command: deploy --keep-vars

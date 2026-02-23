@@ -1,0 +1,27 @@
+name: Deploy Workers (Dual Mode)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-proxytt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
+          config: wrangler.toml
+          command: deploy --keep-vars
+
+  deploy-vless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 84a8fceb1aac6b1b1a4a141d7c791f78
+          config: wrangler.vless.toml
+          command: deploy --keep-vars

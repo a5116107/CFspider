@@ -51,6 +51,8 @@ workers_en.js
 !破皮版workers_超明文.js
 !vless_workers.js
 !爬楼梯workers.js
+!workers/vless.entry.js
+!workers/proxytt.entry.js
 
 # 示例文件
 examples/
