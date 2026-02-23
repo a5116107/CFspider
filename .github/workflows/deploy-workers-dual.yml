@@ -77,16 +77,16 @@ jobs:
           WORKERS_SUBDOMAIN: ${{ steps.workers_subdomain.outputs.subdomain }}
         run: |
           set -euo pipefail
-          url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
+          ping_url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/__ping"
           tmp_headers="$(mktemp)"
           tmp_body="$(mktemp)"
 
           set +e
-          code="$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w "%{http_code}" --max-time 20 "$url")"
+          code="$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w "%{http_code}" --max-time 20 "$ping_url")"
           curl_exit=$?
           set -e
 
-          echo "GET $url -> $code (curl_exit=$curl_exit)"
+          echo "GET $ping_url -> $code (curl_exit=$curl_exit)"
           echo "--- response headers ---"
           cat "$tmp_headers"
           echo "--- response body (first 2000 bytes) ---"
@@ -99,3 +99,23 @@ jobs:
 
           body="$(cat "$tmp_body")"
           test "$body" = "pong"
+
+          root_url="https://cfspider-v2.${WORKERS_SUBDOMAIN}.workers.dev/"
+          root_headers="$(mktemp)"
+          root_body="$(mktemp)"
+
+          set +e
+          root_code="$(curl -sS -D "$root_headers" -o "$root_body" -w "%{http_code}" --max-time 20 "$root_url")"
+          root_exit=$?
+          set -e
+
+          echo "GET $root_url -> $root_code (curl_exit=$root_exit)"
+          echo "--- response body (first 2000 bytes) ---"
+          head -c 2000 "$root_body" || true
+          echo
+
+          if [ "$root_exit" != "0" ] || [ "$root_code" != "200" ]; then
+            exit 1
+          fi
+
+          grep -q "Welcome to nginx!" "$root_body"
