@@ -1,5 +1,3 @@
-import vlessWorker from "./破皮版workers.js";
-
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -9,6 +7,6 @@ export default {
       return new Response("pong", { status: 200 });
     }
 
-    return await vlessWorker.fetch(request, env, ctx);
+    return new Response("ok", { status: 200 });
   },
 };
